@@ -1,0 +1,21 @@
+# <app>: what it is and why it runs here (one paragraph). Copy _template/ to <app>/ and replace my-app everywhere.
+repositories:
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - my-app-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    # Extra objects (HTTPRoute, ServiceMonitor, PrometheusRule, ExternalSecret…), one file per object in resources/
+    - chart: bedag/raw
+      name: my-app-raw
+      namespace: my-app
+      condition: my-app-raw.enabled
+      version: '{{ index .Values "my-app-raw" "version" }}'
+      values:
+          - ./my-app-raw/values.yaml.gotmpl

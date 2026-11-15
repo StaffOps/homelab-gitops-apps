@@ -1,0 +1,11 @@
+# Platform contract for the apps: values every helmfile here loads as `../environment.yaml`. They mirror
+# helm-charts/environment.yaml of StaffOps/homelab-gitops (the platform repo owns them): change them there first.
+# The Argo CD helmfile plugin renders only this repo, so the platform file cannot be read from here.
+cluster:
+    name: k8s01 # kube context; scripts refuse any other
+domain: staffops.space # public zone; an app is exposed at <app>.<domain>
+storageClass: local-path # node disk, no replication (single node)
+# Shared Gateway (Istio, Gateway API): every exposed app attaches an HTTPRoute to it (TLS by the wildcard cert)
+gateway:
+    name: public
+    namespace: gateway

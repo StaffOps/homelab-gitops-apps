@@ -1,0 +1,12 @@
+# Credentials never belong here (Vault holds them); guard against accidents
+*key.json
+*credentials*.json
+vault-init*.json
+*.kubeconfig
+kubeconfig*
+.env
+
+# Rendered manifests and local caches
+*.rendered.yaml
+.helmfile/
+.DS_Store
