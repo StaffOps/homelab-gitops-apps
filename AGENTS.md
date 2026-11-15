@@ -48,6 +48,8 @@ repo only holds apps. Argo CD (ApplicationSet `apps`, AppProject `apps` in the p
 - **Observability**: ServiceMonitor/PodMonitor and a PrometheusRule (Prometheus selects every namespace); a
   dashboard is a platform change (homelab-gitops `helm-charts/monitoring/monitoring-raw/dashboards/`).
 - **Single node**: 1 replica, no PodDisruptionBudgets; storage `local-path` (no replication).
-- **Secrets**: open decision: a Vault path and SecretStore dedicated to apps (`homelab/apps/<app>`) so an app cannot
-  read platform credentials. Until it exists, ask the operator before adding an ExternalSecret.
+- **Secrets**: Vault `secret/homelab/apps/<namespace>/<name>` through the namespace's own SecretStore `vault`
+  (ServiceAccount `vault-reader`, Vault role `apps`; see `_template/my-app-raw/resources/secrets.yaml`). An app reads
+  only its own path; the platform's ClusterSecretStore `vault` refuses app namespaces. Values are written by the
+  operator (`vault kv put secret/homelab/apps/<namespace>/<name> key=value`), never in git.
 - A `{{ … }}` inside a YAML comment of a `.gotmpl` file is still executed.
