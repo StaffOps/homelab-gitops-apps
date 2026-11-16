@@ -282,3 +282,6 @@ tests:
     enabled: false
 pdb:
     enabled: false # single node: a PDB only blocks drains
+# The OpenClaw CLI (poller, center-claw) proves it owns the gateway by its PID heartbeat: the three containers must
+# share the pod's process namespace (all run as uid 1000)
+shareProcessNamespace: true
