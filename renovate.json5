@@ -1,12 +1,13 @@
-// Renovate (self-hosted in .github/workflows/renovate.yaml): opens a PR when an image pinned here gets a new
-// version or a new digest of the same tag. Images are pinned as registry/repository/tag/digest blocks
+// Renovate (self-hosted in .github/workflows/renovate.yaml): opens a PR when an image of our own organizations
+// (PersonalAIgent, StaffOps, staffops-mentoring) gets a new version or a new digest of the same tag. Third-party
+// images are never updated by it. Images are pinned as registry/repository/tag/digest blocks
 // (staffops/generic values) or inline "image: <ref>:<tag>@sha256:…"; both are matched below.
 // Merging the PR deploys it (Argo CD syncs main).
 {
     $schema: "https://docs.renovatebot.com/renovate-schema.json",
     extends: ["config:recommended", ":semanticCommits"],
     timezone: "America/Sao_Paulo",
-    enabledManagers: ["custom.regex", "github-actions"],
+    enabledManagers: ["custom.regex"],
     ignorePaths: ["**/_template/**", "_template/**"],
     prHourlyLimit: 0,
     prConcurrentLimit: 10,
@@ -33,37 +34,19 @@
         },
     ],
     packageRules: [
-        // The template's placeholder image
+        // Nothing by default...
         {
-            matchPackageNames: ["ghcr.io/example/**"],
+            matchPackageNames: ["*"],
             enabled: false,
         },
-        // Our own images (PersonalAIgent, StaffOps): as soon as they are published, one PR per image
+        // ...only our own images, as soon as they are published, one PR per image
         {
             matchDatasources: ["docker"],
             matchPackageNames: ["ghcr.io/personalaigent/**", "ghcr.io/staffops/**", "ghcr.io/staffops-mentoring/**"],
+            enabled: true,
             addLabels: ["own-image"],
             schedule: ["at any time"],
             minimumReleaseAge: null,
-        },
-        // Third-party images: weekly, only after a release is 3 days old
-        {
-            matchDatasources: ["docker"],
-            matchPackageNames: ["!ghcr.io/personalaigent/**", "!ghcr.io/staffops/**", "!ghcr.io/staffops-mentoring/**"],
-            addLabels: ["third-party"],
-            schedule: ["before 6am on monday"],
-            minimumReleaseAge: "3 days",
-        },
-        // The same image inline and in a block (openclaw main container and its init/sidecars) moves together
-        {
-            matchDatasources: ["docker"],
-            groupName: "{{{depName}}}",
-            matchPackageNames: ["ghcr.io/openclaw/openclaw"],
-        },
-        {
-            matchManagers: ["github-actions"],
-            schedule: ["before 6am on monday"],
-            addLabels: ["ci"],
         },
     ],
 }

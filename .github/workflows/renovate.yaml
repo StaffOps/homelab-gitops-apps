@@ -1,4 +1,4 @@
-# Self-hosted Renovate for this repository (config: renovate.json5). Runs every 30 minutes and on demand.
+# Self-hosted Renovate for this repository (config: renovate.json5): PRs for our own images only. Runs every 30 minutes and on demand.
 # PRs are opened with the workflow's GITHUB_TOKEN. Private ghcr images (PersonalAIgent, StaffOps) are read with the
 # repository secret RENOVATE_GHCR_TOKEN: a classic PAT with only read:packages, from an account that can pull them.
 name: renovate
