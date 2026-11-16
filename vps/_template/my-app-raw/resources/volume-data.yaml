@@ -1,0 +1,29 @@
+# Data on the VPS disk: a static hostPath PersistentVolume bound to this namespace's PVC (no provisioner, no StorageClass).
+# One file per volume; delete it if the app has no data.
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: my-app-data
+  spec:
+      capacity:
+          storage: 1Gi
+      accessModes: [ReadWriteOnce]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: ""
+      claimRef:
+          namespace: my-app
+          name: my-app-data
+      hostPath:
+          path: /opt/my-app/data
+          type: {{ .Values.storage.hostPathType }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+      name: my-app-data
+  spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: ""
+      volumeName: my-app-data
+      resources:
+          requests:
+              storage: 1Gi

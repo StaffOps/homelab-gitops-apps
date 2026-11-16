@@ -15,12 +15,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHARTS="$ROOT"
-API_ARGS='--api-versions postgresql.cnpg.io/v1 --api-versions keda.sh/v1alpha1 --api-versions monitoring.coreos.com/v1 --api-versions monitoring.coreos.com/v1/PrometheusRule --api-versions monitoring.coreos.com/v1/ServiceMonitor --api-versions gateway.networking.k8s.io/v1 --api-versions cert-manager.io/v1 --api-versions external-secrets.io/v1 --api-versions metallb.io/v1beta1'
+API_ARGS='--api-versions postgresql.cnpg.io/v1 --api-versions keda.sh/v1alpha1 --api-versions monitoring.coreos.com/v1 --api-versions monitoring.coreos.com/v1/PrometheusRule --api-versions monitoring.coreos.com/v1/ServiceMonitor --api-versions gateway.networking.k8s.io/v1 --api-versions cert-manager.io/v1 --api-versions external-secrets.io/v1 --api-versions metallb.io/v1beta1 --api-versions traefik.io/v1alpha1'
 
 fail() { echo "✘ $*" >&2; exit 1; }
 
+# k8s01 apps: <app>/helmfile.yaml.gotmpl; VPS k3s apps (ApplicationSet vps): vps/<app>/helmfile.yaml.gotmpl
 list_apps() {
-    (cd "$CHARTS" && find . -mindepth 2 -maxdepth 2 -name helmfile.yaml.gotmpl) | sed 's|^\./||; s|/[^/]*$||' | grep -v '^_' | sort -u
+    (cd "$CHARTS" && find . -mindepth 2 -maxdepth 3 -name helmfile.yaml.gotmpl) | sed 's|^\./||; s|/[^/]*$||' |
+        grep -vE '^_|^vps/_' | grep -vE '^[^/]+/[^/]+/' | sort -u
 }
 
 case "${1:-}" in
@@ -88,10 +90,12 @@ releases=$(cd "$DIR" && helmfile list --output json 2>/dev/null | yq -p json -N 
 while read -r rel ns; do
     [ -n "$rel" ] || continue
     [ -d "$DIR/$rel" ] || { echo "✘ release $rel has no directory $APP/$rel/ (no Application would be created)" >&2; problems=$((problems + 1)); }
-    [ "$ns" = "$APP" ] || { echo "✘ release $rel namespace '$ns' is not '$APP'" >&2; problems=$((problems + 1)); }
+    [ "$ns" = "$(basename "$APP")" ] || { echo "✘ release $rel namespace '$ns' is not '$(basename "$APP")'" >&2; problems=$((problems + 1)); }
 done <<<"$releases"
 # Cluster-scoped kinds (only Namespace is allowed by AppProject apps; a chart that needs more belongs in homelab-gitops)
 cluster=$(yq -N '.kind' "$RENDER" | grep -x -E 'CustomResourceDefinition|ClusterRole|ClusterRoleBinding|MutatingWebhookConfiguration|ValidatingWebhookConfiguration|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding|APIService|StorageClass|PersistentVolume|PriorityClass|RuntimeClass|IngressClass|GatewayClass|ClusterIssuer|ClusterSecretStore|ClusterExternalSecret|ClusterPolicy|ClusterTriggerAuthentication|ClusterServingRuntime|ClusterImagePolicy' | sort -u || true)
+# AppProject vps (VPS k3s) also allows PersistentVolume: the apps keep their data in static hostPath PVs
+case "$APP" in vps/*) cluster=$(echo "$cluster" | grep -vx 'PersistentVolume' || true) ;; esac
 [ -z "$cluster" ] || { echo "✘ cluster-scoped kinds that AppProject apps refuses: $(echo "$cluster" | tr '\n' ' ')" >&2; problems=$((problems + 1)); }
 
 [ -n "$OUT" ] && cp "$RENDER" "$OUT" && echo && echo "Manifests saved to $OUT"

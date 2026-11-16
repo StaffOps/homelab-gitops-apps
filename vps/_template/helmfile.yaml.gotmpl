@@ -1,0 +1,33 @@
+# <app> on the VPS k3s: what it is (one paragraph). Copy vps/_template/ to vps/<app>/ (= namespace) and replace
+# my-app everywhere. Release my-app = the workload (staffops/generic chart); my-app-raw = SecretStore,
+# ExternalSecrets, PersistentVolumes, Traefik Middlewares and anything else (bedag/raw, one file per object).
+repositories:
+    - name: staffops
+      url: https://staffops.github.io/helm-charts
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - my-app:
+                  enabled: true
+            - my-app-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: staffops/generic
+      name: my-app
+      namespace: my-app
+      condition: my-app.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./my-app/values.yaml.gotmpl
+    - chart: bedag/raw
+      name: my-app-raw
+      namespace: my-app
+      condition: my-app-raw.enabled
+      version: '{{ index .Values "my-app-raw" "version" }}'
+      values:
+          - ./my-app-raw/values.yaml.gotmpl

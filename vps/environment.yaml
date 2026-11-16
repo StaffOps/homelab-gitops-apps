@@ -1,0 +1,34 @@
+# Contract of the VPS k3s for its apps (homelab-gitops ADR 0008; ApplicationSet vps, AppProject vps). It mirrors
+# helm-charts/environment-vps.yaml of StaffOps/homelab-gitops (the platform repo owns it): change it there first.
+# Every helmfile under vps/<app>/ loads it as ../environment.yaml.
+cluster:
+    name: vps
+domain: staffops.space
+# Exposure: a Traefik Ingress (k3s add-on). TLS: cert-manager per Ingress (annotation below, DNS-01 on Cloudflare).
+# DNS: names that exist today keep their manual CNAMEs to the VPS; a NEW name needs the annotation
+# external-dns.alpha.kubernetes.io/hostname (external-dns there only manages annotated Ingresses).
+ingress:
+    className: traefik
+    clusterIssuer: letsencrypt-prod
+# Authelia (namespace edge). Each app namespace renders its own Middlewares from these values
+# (vps/_template/my-app-raw/resources/middlewares.yaml): Traefik does not follow cross-namespace references.
+authelia:
+    url: https://auth.staffops.space
+    forwardAuth: http://authelia.edge.svc.cluster.local:9091/api/authz/forward-auth
+    forwardAuthBasic: http://authelia.edge.svc.cluster.local:9091/api/authz/forward-auth-basic
+    responseHeaders: [Remote-User, Remote-Groups, Remote-Name, Remote-Email]
+# Secrets: Vault on k8s01 over the tailnet, mount kubernetes-vps, role apps (vault-reader of this namespace,
+# path homelab/apps/<namespace>/* only).
+vault:
+    address: https://vault.staffops.space
+    authMount: kubernetes-vps
+# Data: static hostPath PersistentVolumes on the VPS disk (the docker compose directories), one PV + PVC per volume.
+storage:
+    hostPathType: DirectoryOrCreate
+# Host (Hermes, center-agent, openclaw-poller on systemd): the node seen from pods (cni0) and the fixed ClusterIPs
+# the host uses for the services it calls.
+host:
+    ip: 10.42.0.1
+# Generic app chart for every workload here
+genericChart:
+    version: 0.1.0
