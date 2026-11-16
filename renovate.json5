@@ -12,6 +12,8 @@
     prHourlyLimit: 0,
     prConcurrentLimit: 10,
     labels: ["renovate"],
+    // GitHub notifies the owner of each new PR (web, mobile app, e-mail per their notification settings)
+    assignees: ["karlipegomes"],
     customManagers: [
         {
             customType: "regex",
