@@ -1,0 +1,69 @@
+// Renovate (self-hosted in .github/workflows/renovate.yaml): opens a PR when an image pinned here gets a new
+// version or a new digest of the same tag. Images are pinned as registry/repository/tag/digest blocks
+// (staffops/generic values) or inline "image: <ref>:<tag>@sha256:…"; both are matched below.
+// Merging the PR deploys it (Argo CD syncs main).
+{
+    $schema: "https://docs.renovatebot.com/renovate-schema.json",
+    extends: ["config:recommended", ":semanticCommits"],
+    timezone: "America/Sao_Paulo",
+    enabledManagers: ["custom.regex", "github-actions"],
+    ignorePaths: ["**/_template/**", "_template/**"],
+    prHourlyLimit: 0,
+    prConcurrentLimit: 10,
+    labels: ["renovate"],
+    customManagers: [
+        {
+            customType: "regex",
+            description: "image block: registry / repository / tag / digest",
+            managerFilePatterns: ["/\\.ya?ml(\\.gotmpl)?$/"],
+            matchStrings: [
+                "registry:\\s*(?<registry>[^\\s\"']+)\\s*\\n\\s*repository:\\s*(?<repository>[^\\s\"']+)\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"']+)[\"']?\\s*\\n\\s*digest:\\s*(?<currentDigest>sha256:[a-f0-9]{64})",
+            ],
+            depNameTemplate: "{{{registry}}}/{{{repository}}}",
+            datasourceTemplate: "docker",
+        },
+        {
+            customType: "regex",
+            description: "inline image: <ref>:<tag>@sha256:<digest>",
+            managerFilePatterns: ["/\\.ya?ml(\\.gotmpl)?$/"],
+            matchStrings: [
+                "image:\\s*[\"']?(?<depName>[^\\s:@\"']+):(?<currentValue>[^\\s@\"']+)@(?<currentDigest>sha256:[a-f0-9]{64})",
+            ],
+            datasourceTemplate: "docker",
+        },
+    ],
+    packageRules: [
+        // The template's placeholder image
+        {
+            matchPackageNames: ["ghcr.io/example/**"],
+            enabled: false,
+        },
+        // Our own images (PersonalAIgent, StaffOps): as soon as they are published, one PR per image
+        {
+            matchDatasources: ["docker"],
+            matchPackageNames: ["ghcr.io/personalaigent/**", "ghcr.io/staffops/**", "ghcr.io/staffops-mentoring/**"],
+            addLabels: ["own-image"],
+            schedule: ["at any time"],
+            minimumReleaseAge: null,
+        },
+        // Third-party images: weekly, only after a release is 3 days old
+        {
+            matchDatasources: ["docker"],
+            matchPackageNames: ["!ghcr.io/personalaigent/**", "!ghcr.io/staffops/**", "!ghcr.io/staffops-mentoring/**"],
+            addLabels: ["third-party"],
+            schedule: ["before 6am on monday"],
+            minimumReleaseAge: "3 days",
+        },
+        // The same image inline and in a block (openclaw main container and its init/sidecars) moves together
+        {
+            matchDatasources: ["docker"],
+            groupName: "{{{depName}}}",
+            matchPackageNames: ["ghcr.io/openclaw/openclaw"],
+        },
+        {
+            matchManagers: ["github-actions"],
+            schedule: ["before 6am on monday"],
+            addLabels: ["ci"],
+        },
+    ],
+}
