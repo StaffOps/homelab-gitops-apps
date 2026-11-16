@@ -1,0 +1,27 @@
+# hermes.<domain>: the Hermes dashboard on the host (hermes-service.yaml), behind Authelia (admins). Existing name:
+# keeps its manual DNS record (no external-dns annotation).
+- apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+      name: hermes
+      annotations:
+          cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.middlewares: edge-strip-remote-headers@kubernetescrd,edge-authelia@kubernetescrd
+  spec:
+      ingressClassName: {{ .Values.ingress.className }}
+      tls:
+          - secretName: hermes-tls
+            hosts:
+                - hermes.{{ .Values.domain }}
+      rules:
+          - host: hermes.{{ .Values.domain }}
+            http:
+                paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                          service:
+                              name: hermes
+                              port:
+                                  name: http

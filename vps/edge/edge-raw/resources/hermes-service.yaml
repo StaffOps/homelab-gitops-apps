@@ -1,0 +1,29 @@
+# The Hermes dashboard runs on the VPS host (systemd, 0.0.0.0:9119), not in a pod: a selector-less Service plus a
+# hand-made EndpointSlice to the node as pods see it (cni0). Needs UFW pod→host 9119 on the VPS.
+- apiVersion: v1
+  kind: Service
+  metadata:
+      name: hermes
+  spec:
+      type: ClusterIP
+      ports:
+          - name: http
+            port: 9119
+            targetPort: 9119
+            protocol: TCP
+- apiVersion: discovery.k8s.io/v1
+  kind: EndpointSlice
+  metadata:
+      name: hermes-host
+      labels:
+          kubernetes.io/service-name: hermes
+  addressType: IPv4
+  ports:
+      - name: http
+        port: 9119
+        protocol: TCP
+  endpoints:
+      - addresses:
+            - {{ .Values.host.ip }}
+        conditions:
+            ready: true

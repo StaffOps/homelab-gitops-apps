@@ -1,0 +1,12 @@
+# Authelia basic-auth endpoint (git over HTTPS cannot follow the browser login redirect): used only by /git.
+- apiVersion: traefik.io/v1alpha1
+  kind: Middleware
+  metadata:
+      name: authelia-basic
+  spec:
+      forwardAuth:
+          address: {{ .Values.authelia.forwardAuthBasic }}
+          trustForwardHeader: true
+          authResponseHeaders:
+              - Remote-User
+              - Remote-Groups

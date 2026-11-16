@@ -1,0 +1,41 @@
+# agent-api: in 8000 from the host (Hermes, seen from pods as host.ip) and from 9router (namespace edge); out only to
+# claude-runner and DNS.
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+      name: agent-api
+  spec:
+      podSelector:
+          matchLabels:
+              app.kubernetes.io/instance: agent-api
+      policyTypes: [Ingress, Egress]
+      ingress:
+          - from:
+                - ipBlock:
+                      cidr: {{ .Values.host.ip }}/32
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: edge
+                  podSelector:
+                      matchLabels:
+                          app.kubernetes.io/instance: ninerouter
+            ports:
+                - port: 8000
+                  protocol: TCP
+      egress:
+          - to:
+                - podSelector:
+                      matchLabels:
+                          app.kubernetes.io/instance: claude-runner
+            ports:
+                - port: 8000
+                  protocol: TCP
+          - to:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+            ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP

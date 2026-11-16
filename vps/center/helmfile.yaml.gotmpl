@@ -1,0 +1,35 @@
+# center on the VPS k3s: the read-only agents dashboard (Hermes hosts and the Claw) at center.<domain>, behind
+# Authelia. Port 8080 = UI (Ingress); port 8081 = ingest (bearer token per host), never on the Ingress: the host's
+# center-agent posts to the fixed ClusterIP 10.43.100.60:8081 and the openclaw center-claw sidecar to
+# center-ingest.center:8081. Data (SQLite and ingest tokens) on the VPS disk. Release center = the workload
+# (staffops/generic); center-raw = PV/PVC, ingest Service, Middlewares, NetworkPolicy (bedag/raw).
+repositories:
+    - name: staffops
+      url: https://staffops.github.io/helm-charts
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - center:
+                  enabled: true
+            - center-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: staffops/generic
+      name: center
+      namespace: center
+      condition: center.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./center/values.yaml.gotmpl
+    - chart: bedag/raw
+      name: center-raw
+      namespace: center
+      condition: center-raw.enabled
+      version: '{{ index .Values "center-raw" "version" }}'
+      values:
+          - ./center-raw/values.yaml.gotmpl

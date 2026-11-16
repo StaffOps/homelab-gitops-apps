@@ -1,0 +1,31 @@
+# center: UI 8080 only from Traefik (kube-system); ingest 8081 from the host (center-agent, seen from pods as host.ip)
+# and from namespace openclaw (center-claw sidecar). Egress is not restricted.
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+      name: center
+  spec:
+      podSelector:
+          matchLabels:
+              app.kubernetes.io/instance: center
+      policyTypes: [Ingress]
+      ingress:
+          - from:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+                  podSelector:
+                      matchLabels:
+                          app.kubernetes.io/name: traefik
+            ports:
+                - port: 8080
+                  protocol: TCP
+          - from:
+                - ipBlock:
+                      cidr: {{ .Values.host.ip }}/32
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: openclaw
+            ports:
+                - port: 8081
+                  protocol: TCP

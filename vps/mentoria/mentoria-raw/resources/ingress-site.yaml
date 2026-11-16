@@ -1,0 +1,28 @@
+# mentoria.<domain>/: the site behind the Authelia browser login. This Ingress owns the certificate (cert-manager
+# annotation); the /git and /install.sh Ingresses reuse its TLS Secret. The name exists today with a manual DNS
+# record: no external-dns annotation.
+- apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+      name: mentoria-portal
+      annotations:
+          cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.middlewares: mentoria-strip-remote-headers@kubernetescrd,mentoria-authelia@kubernetescrd
+  spec:
+      ingressClassName: {{ .Values.ingress.className }}
+      tls:
+          - secretName: mentoria-tls
+            hosts:
+                - mentoria.{{ .Values.domain }}
+      rules:
+          - host: mentoria.{{ .Values.domain }}
+            http:
+                paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                          service:
+                              name: mentoria-portal
+                              port:
+                                  name: http

@@ -1,0 +1,33 @@
+# docs on the VPS k3s: the Hermes documentation site (static MkDocs build in a Caddy image) at docs.<domain>, behind
+# Authelia. Release hermes-docs = the workload (staffops/generic); docs-raw = Traefik Middlewares and the
+# NetworkPolicy (bedag/raw, one file per object). No secrets, no data.
+repositories:
+    - name: staffops
+      url: https://staffops.github.io/helm-charts
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - hermes-docs:
+                  enabled: true
+            - docs-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: staffops/generic
+      name: hermes-docs
+      namespace: docs
+      condition: hermes-docs.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./hermes-docs/values.yaml.gotmpl
+    - chart: bedag/raw
+      name: docs-raw
+      namespace: docs
+      condition: docs-raw.enabled
+      version: '{{ index .Values "docs-raw" "version" }}'
+      values:
+          - ./docs-raw/values.yaml.gotmpl

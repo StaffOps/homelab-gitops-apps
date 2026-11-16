@@ -1,0 +1,119 @@
+# NATS JetStream task queue of OpenClaw (staffops/generic 0.1.0), single node, with the Prometheus exporter as a
+# sidecar reading the monitoring port over loopback. Clients: the poller sidecar of openclaw and, from the host,
+# the Hermes openclaw-bridge cron job (fixed ClusterIP below). nats-server.conf is in this directory; its
+# include secrets.conf (password hashes) comes from Secret nats-auth, projected next to it in /etc/nats.
+fullnameOverride: nats
+nameOverride: nats
+containerName: nats
+workload:
+    kind: StatefulSet
+image:
+    registry: docker.io
+    repository: library/nats
+    tag: "2.15.1-alpine"
+    digest: sha256:2ae57dfba3063d5e25fecb75256118c0882a1a2d2cf7d0fba17a7c701df956f6
+args: [-c, /etc/nats/nats-server.conf]
+ports:
+    - name: client
+      containerPort: 4222
+    # served by the exporter sidecar (same pod network); declared here so the Service publishes it
+    - name: metrics
+      containerPort: 7777
+env:
+    GOMEMLIMIT: 230MiB
+# The monitoring port listens on 127.0.0.1 only, so an httpGet probe (pod IP) cannot reach it: exec wget instead.
+livenessProbe:
+    exec:
+        command: [wget, -q, -O, /dev/null, "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+readinessProbe:
+    exec:
+        command: [wget, -q, -O, /dev/null, "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+# Measured 22Mi now, 25.5Mi max over 7 days
+resources:
+    requests:
+        cpu: 10m
+        memory: 32Mi
+    limits:
+        memory: 256Mi
+securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+        drop: ["ALL"]
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000 # projected config readable by uid 1000; the hostPath data dir is chowned on the host
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+podAntiAffinityPreset: ""
+tmpVolume:
+    enabled: false
+configMaps:
+    config:
+        data:
+            nats-server.conf: |
+                {{- readFile "nats-server.conf" | nindent 16 }}
+extraVolumeMounts:
+    - name: etc
+      mountPath: /etc/nats
+      readOnly: true
+    - name: data
+      mountPath: /data
+extraVolumes:
+    - name: etc
+      projected:
+          defaultMode: 0440
+          sources:
+              - configMap:
+                    name: nats-config
+              - secret:
+                    name: nats-auth
+                    items:
+                        - key: secrets.conf
+                          path: secrets.conf
+    - name: data
+      persistentVolumeClaim:
+          claimName: openclaw-nats-data
+sidecars:
+    - name: exporter
+      image: docker.io/natsio/prometheus-nats-exporter:0.20.2@sha256:c623b608e148e31e1c1c878673a197f1828e58ce90de4f01d22f1baa84c8fee9
+      imagePullPolicy: IfNotPresent
+      args: [-varz, -healthz, -jsz=all, -port, "7777", -addr, 0.0.0.0, "http://127.0.0.1:8222"]
+      # Measured 18Mi max over 7 days
+      resources:
+          requests:
+              cpu: 5m
+              memory: 16Mi
+          limits:
+              memory: 64Mi
+      securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          capabilities:
+              drop: ["ALL"]
+service:
+    clusterIP: 10.43.100.30 # fixed: the Hermes openclaw-bridge on the host uses nats://10.43.100.30:4222
+    # Alloy scrapes annotated Services (no Prometheus CRDs on the VPS)
+    annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "7777"
+        prometheus.io/path: /metrics
+serviceAccount:
+    create: false
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

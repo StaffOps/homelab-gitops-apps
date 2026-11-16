@@ -1,0 +1,65 @@
+# hermes-docs (staffops/generic 0.1.0; every key: helm show values staffops/generic --version 0.1.0).
+# The image runs "caddy file-server --root /srv --listen :8080"; it has no /healthz, so the probes read / (index.html).
+fullnameOverride: hermes-docs
+image:
+    registry: ghcr.io
+    repository: personalaigent/hermes-docs
+    tag: "main"
+    digest: sha256:485e3993727cb033b8056c29e7c7d1dab94941d13685df80ac92a9890fff4a1c
+ports:
+    - name: http
+      containerPort: 8080
+livenessProbe:
+    httpGet:
+        path: /
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+readinessProbe:
+    httpGet:
+        path: /
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+resources:
+    requests:
+        cpu: 5m
+        memory: 16Mi # no measurement; same Caddy static server as mentoria-portal
+    limits:
+        memory: 64Mi
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+# XDG_CONFIG_HOME and XDG_DATA_HOME of the image live under /tmp
+tmpVolume:
+    enabled: true
+    mountPath: /tmp
+    sizeLimit: 64Mi
+ingress:
+    enabled: true
+    className: {{ .Values.ingress.className }}
+    annotations:
+        cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        traefik.ingress.kubernetes.io/router.middlewares: docs-strip-remote-headers@kubernetescrd,docs-authelia@kubernetescrd
+    hosts:
+        - host: docs.{{ .Values.domain }}
+          paths:
+              - path: /
+                pathType: Prefix
+                port: http
+    tls:
+        - secretName: docs-tls
+          hosts:
+              - docs.{{ .Values.domain }}
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

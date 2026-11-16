@@ -1,0 +1,29 @@
+# Target of `openclaw backup create` (/backups, outside the state tree), uid 1000 mode 0700.
+# hostPath /opt/openclaw/backups on the VPS disk (the docker compose directory); owner and mode are set on the host.
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: openclaw-backups
+  spec:
+      capacity:
+          storage: 2Gi
+      accessModes: [ReadWriteOnce]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: ""
+      claimRef:
+          namespace: openclaw
+          name: openclaw-backups
+      hostPath:
+          path: /opt/openclaw/backups
+          type: {{ .Values.storage.hostPathType }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+      name: openclaw-backups
+  spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: ""
+      volumeName: openclaw-backups
+      resources:
+          requests:
+              storage: 2Gi

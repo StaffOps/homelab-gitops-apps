@@ -1,0 +1,38 @@
+# NATS: clients on 4222 from the host (Hermes openclaw-bridge at the fixed ClusterIP) and from the openclaw pod
+# (poller sidecar); exporter metrics on 7777 from Alloy. No egress besides DNS.
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+      name: nats
+  spec:
+      podSelector:
+          matchLabels:
+              app.kubernetes.io/instance: nats
+      policyTypes: [Ingress, Egress]
+      ingress:
+          - from:
+                - ipBlock:
+                      cidr: {{ .Values.host.ip }}/32
+                - podSelector:
+                      matchLabels:
+                          app.kubernetes.io/instance: openclaw
+            ports:
+                - port: 4222
+                  protocol: TCP
+          - from:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: monitoring
+            ports:
+                - port: 7777
+                  protocol: TCP
+      egress:
+          - to:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+            ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP

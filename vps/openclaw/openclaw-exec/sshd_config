@@ -1,0 +1,20 @@
+# sshd do sandbox: só chave, só o usuário runner, nada de túneis/encaminhamentos.
+Port 2222
+HostKey /etc/ssh-host/ssh_host_ed25519_key
+AuthorizedKeysFile /etc/ssh-auth/authorized_keys
+PidFile /tmp/sshd.pid
+AllowUsers runner
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+StrictModes no
+AllowTcpForwarding no
+AllowAgentForwarding no
+AllowStreamLocalForwarding no
+X11Forwarding no
+PermitTunnel no
+GatewayPorts no
+PermitUserEnvironment no
+ClientAliveInterval 60
+LogLevel INFO

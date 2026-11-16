@@ -1,0 +1,91 @@
+# center (staffops/generic 0.1.0; every key: helm show values staffops/generic --version 0.1.0).
+# Image entrypoint /center, cmd "serve --data /data"; the env below completes it (as the compose did).
+fullnameOverride: center
+image:
+    registry: ghcr.io
+    repository: personalaigent/center
+    tag: "v0.1.0"
+    digest: sha256:912ee1632214dcb7bce499abf9779dccacdcd46f922deb930d66d2aa0450baf0
+ports:
+    - name: http
+      containerPort: 8080
+    # ingest: own Service center-ingest (fixed ClusterIP, center-raw), kept off this Service and the Ingress
+    - name: ingest
+      containerPort: 8081
+      expose: false
+env:
+    PORT: "8080"
+    DATA_DIR: /data
+    INGEST_ADDR: "0.0.0.0:8081" # ingest tokens: /data/tokens/<host>.token (TOKENS_DIR default)
+    TZ: UTC
+    # PROMETHEUS_URL and LOKI_URL are not set: the VPS Prometheus and Loki leave with the compose stack, so the VPS
+    # and Models screens answer "not configured" until they point at the central stack.
+workload:
+    strategy:
+        type: Recreate # one SQLite writer on a hostPath volume
+# SQLite and the ingest tokens: hostPath /opt/projects/center/data (PV/PVC center-data in center-raw)
+persistence:
+    enabled: true
+    existingClaim: center-data
+    mountPath: /data
+livenessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+readinessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+startupProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 5
+    failureThreshold: 12
+resources:
+    requests:
+        cpu: 10m
+        memory: 64Mi # no measurement in the facts
+    limits:
+        cpu: "1"
+        memory: 512Mi # compose mem_limit
+# uid of the host user that owns /opt/projects/center/data (the image's own nonroot is 65532)
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+tmpVolume:
+    enabled: true
+    mountPath: /tmp
+    sizeLimit: 64Mi
+ingress:
+    enabled: true
+    className: {{ .Values.ingress.className }}
+    annotations:
+        cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        traefik.ingress.kubernetes.io/router.middlewares: center-strip-remote-headers@kubernetescrd,center-authelia@kubernetescrd
+    hosts:
+        - host: center.{{ .Values.domain }}
+          paths:
+              - path: /
+                pathType: Prefix
+                port: http
+    tls:
+        - secretName: center-tls
+          hosts:
+              - center.{{ .Values.domain }}
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

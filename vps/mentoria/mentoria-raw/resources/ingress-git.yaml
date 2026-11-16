@@ -1,0 +1,25 @@
+# mentoria.<domain>/git: the mentees' git repositories, behind Authelia basic auth (the image strips the prefix).
+- apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+      name: mentoria-portal-git
+      annotations:
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.middlewares: mentoria-strip-remote-headers@kubernetescrd,mentoria-authelia-basic@kubernetescrd
+  spec:
+      ingressClassName: {{ .Values.ingress.className }}
+      tls:
+          - secretName: mentoria-tls
+            hosts:
+                - mentoria.{{ .Values.domain }}
+      rules:
+          - host: mentoria.{{ .Values.domain }}
+            http:
+                paths:
+                    - path: /git
+                      pathType: Prefix
+                      backend:
+                          service:
+                              name: mentoria-portal
+                              port:
+                                  name: http

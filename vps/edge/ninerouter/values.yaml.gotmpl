@@ -1,0 +1,128 @@
+# 9router (staffops/generic 0.1.0; every key: helm show values staffops/generic --version 0.1.0): the
+# OpenAI-compatible LLM router. UI at 9router.<domain> behind Authelia (admins); /v1 for OpenClaw (namespace
+# openclaw) and the host's Hermes (fixed ClusterIP 10.43.100.20:20128). Provider keys live in its sqlite db on the
+# hostPath PV /opt/edge/9router (owned 1000:1000). Named ninerouter: a Service name cannot start with a digit.
+fullnameOverride: ninerouter
+image:
+    registry: docker.io
+    repository: decolua/9router
+    tag: "0.5.104"
+    digest: sha256:5fc7020f3cf1ca6831bffe80314ecab9dde915d27ee3c479a4bb66f45dabbc27
+workload:
+    strategy:
+        type: Recreate # one writer of the sqlite db on the hostPath
+# The image entrypoint chowns /app/data and calls su-exec, which fails without root: run the server directly
+command: [node, custom-server.js]
+ports:
+    - name: http
+      containerPort: 20128
+env:
+    DEBUG: "false"
+    DATA_DIR: /app/data
+    PORT: "20128"
+    HOSTNAME: 0.0.0.0
+    NODE_ENV: production
+persistence:
+    enabled: true
+    existingClaim: ninerouter-data # edge-raw/resources/volume-ninerouter.yaml
+    mountPath: /app/data
+livenessProbe:
+    httpGet:
+        path: /api/health
+        port: http
+    initialDelaySeconds: 15
+    periodSeconds: 30
+    timeoutSeconds: 3
+readinessProbe:
+    httpGet:
+        path: /api/health
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+resources:
+    requests:
+        cpu: 20m
+        memory: 128Mi
+    limits:
+        memory: 384Mi
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+tmpVolume:
+    enabled: true
+    sizeLimit: 128Mi
+podAntiAffinityPreset: ""
+service:
+    clusterIP: 10.43.100.20 # the host's Hermes calls http://10.43.100.20:20128/v1
+ingress:
+    enabled: true
+    className: {{ .Values.ingress.className }}
+    annotations:
+        cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        traefik.ingress.kubernetes.io/router.middlewares: edge-strip-remote-headers@kubernetescrd,edge-authelia@kubernetescrd
+    hosts:
+        - host: 9router.{{ .Values.domain }}
+          paths:
+              - path: /
+                pathType: Prefix
+                port: http
+    tls:
+        - secretName: 9router-tls
+          hosts:
+              - 9router.{{ .Values.domain }}
+networkPolicy:
+    enabled: true
+    policyTypes: [Ingress, Egress]
+    ingress:
+        - from:
+              # Traefik (UI behind Authelia)
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                podSelector:
+                    matchLabels:
+                        app.kubernetes.io/name: traefik
+              # OpenClaw (provider 9router)
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: openclaw
+              # The host: Hermes fallback model
+              - ipBlock:
+                    cidr: {{ .Values.host.ip }}/32
+          ports:
+              - port: 20128
+                protocol: TCP
+    egress:
+        # LLM providers (OpenRouter and others)
+        - to:
+              - ipBlock:
+                    cidr: 0.0.0.0/0
+                    except:
+                        - 10.0.0.0/8
+                        - 172.16.0.0/12
+                        - 192.168.0.0/16
+          ports:
+              - port: 443
+                protocol: TCP
+        # chaitops agent-api (provider chaitops)
+        - to:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: chaitops
+                podSelector:
+                    matchLabels:
+                        app.kubernetes.io/instance: agent-api
+          ports:
+              - port: 8000
+                protocol: TCP
+    allowDNS: true
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

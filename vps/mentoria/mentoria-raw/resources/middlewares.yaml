@@ -1,0 +1,23 @@
+# Traefik Middlewares of this namespace (Traefik does not follow cross-namespace references). Reference them from an
+# Ingress with traefik.ingress.kubernetes.io/router.middlewares: <namespace>-strip-remote-headers@kubernetescrd,<namespace>-authelia@kubernetescrd
+# strip-remote-headers runs first: a client must never send its own Remote-* identity headers.
+- apiVersion: traefik.io/v1alpha1
+  kind: Middleware
+  metadata:
+      name: strip-remote-headers
+  spec:
+      headers:
+          customRequestHeaders:
+              {{- range .Values.authelia.responseHeaders }}
+              {{ . }}: ""
+              {{- end }}
+- apiVersion: traefik.io/v1alpha1
+  kind: Middleware
+  metadata:
+      name: authelia
+  spec:
+      forwardAuth:
+          address: {{ .Values.authelia.forwardAuth }}
+          trustForwardHeader: true
+          authResponseHeaders:
+              {{- toYaml .Values.authelia.responseHeaders | nindent 14 }}

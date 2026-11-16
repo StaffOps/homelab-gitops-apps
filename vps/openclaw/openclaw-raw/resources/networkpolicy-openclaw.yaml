@@ -1,0 +1,79 @@
+# Gateway pod (openclaw + center-claw + poller). In: the UI/A2A/hooks port from Traefik and from the host (Hermes
+# A2A at the fixed ClusterIP; host traffic reaches pods from cni0 10.42.0.1, also the kubelet probes). Out: DNS,
+# 9router (LLM provider), the exec sandbox (ssh), Hermes A2A on the host, the internet on 443 (Telegram, LLM APIs),
+# center ingest (center-claw) and NATS (poller).
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+      name: openclaw
+  spec:
+      podSelector:
+          matchLabels:
+              app.kubernetes.io/instance: openclaw
+      policyTypes: [Ingress, Egress]
+      ingress:
+          - from:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+                  podSelector:
+                      matchLabels:
+                          app.kubernetes.io/name: traefik
+                - ipBlock:
+                      cidr: {{ .Values.host.ip }}/32
+            ports:
+                - port: 18789
+                  protocol: TCP
+      egress:
+          - to:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+            ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+          - to:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: edge
+            ports:
+                - port: 20128
+                  protocol: TCP
+          - to:
+                - podSelector:
+                      matchLabels:
+                          app.kubernetes.io/instance: openclaw-exec
+            ports:
+                - port: 2222
+                  protocol: TCP
+          - to:
+                - podSelector:
+                      matchLabels:
+                          app.kubernetes.io/instance: nats
+            ports:
+                - port: 4222
+                  protocol: TCP
+          - to:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: center
+            ports:
+                - port: 8081
+                  protocol: TCP
+          # Hermes A2A on the host
+          - to:
+                - ipBlock:
+                      cidr: {{ .Values.host.ip }}/32
+            ports:
+                - port: 9900
+                  protocol: TCP
+          # Internet (Telegram, LLM APIs); never the pod/service networks or private ranges
+          - to:
+                - ipBlock:
+                      cidr: 0.0.0.0/0
+                      except: [10.42.0.0/16, 10.43.0.0/16, 172.16.0.0/12, 100.64.0.0/10, 192.168.0.0/16]
+            ports:
+                - port: 443
+                  protocol: TCP

@@ -1,0 +1,100 @@
+# Execution sandbox of OpenClaw (staffops/generic 0.1.0): the agent's commands run here over SSH
+# (runner@openclaw-exec.openclaw.svc.cluster.local:2222), never in the gateway. sshd as uid 2000, key-only, no
+# forwarding; read-only rootfs with /tmp and /work (sandbox workspace root /work/sandboxes) as disk emptyDirs.
+# sshd_config is in this directory; host key and authorized_keys come from Secret openclaw-exec-ssh.
+fullnameOverride: openclaw-exec
+nameOverride: openclaw-exec
+containerName: openclaw-exec
+workload:
+    kind: Deployment
+image:
+    registry: ghcr.io
+    repository: personalaigent/openclaw-exec
+    tag: main
+    digest: sha256:1b8ac9396c384bb866ddd53c9dae9e2a616f67b1723b3c5eb5b93c0469abe659
+command: [/usr/sbin/sshd, -D, -e, -f, /etc/ssh/sshd_config]
+ports:
+    - name: ssh
+      containerPort: 2222
+livenessProbe:
+    tcpSocket:
+        port: ssh
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+readinessProbe:
+    tcpSocket:
+        port: ssh
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+# Measured 1.7Mi now, 2.4Mi max over 7 days; the limit leaves room for the agent's commands
+resources:
+    requests:
+        cpu: 10m
+        memory: 16Mi
+    limits:
+        cpu: "1"
+        memory: 384Mi
+securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+        drop: ["ALL"]
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 2000
+    runAsGroup: 2000
+    fsGroup: 2000 # secret files (host key) readable by uid 2000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+podAntiAffinityPreset: ""
+# disk emptyDirs (a memory-backed one would count against the memory limit)
+tmpVolume:
+    enabled: true
+    mountPath: /tmp
+    sizeLimit: 64Mi
+configMaps:
+    sshd:
+        mountPath: /etc/ssh/sshd_config
+        subPath: sshd_config
+        data:
+            sshd_config: |
+                {{- readFile "sshd_config" | nindent 16 }}
+extraVolumeMounts:
+    - name: work
+      mountPath: /work
+    - name: host-key
+      mountPath: /etc/ssh-host
+      readOnly: true
+    - name: authorized-keys
+      mountPath: /etc/ssh-auth
+      readOnly: true
+extraVolumes:
+    - name: work
+      emptyDir:
+          sizeLimit: 512Mi
+    - name: host-key
+      secret:
+          secretName: openclaw-exec-ssh
+          defaultMode: 0400
+          items:
+              - key: ssh_host_ed25519_key
+                path: ssh_host_ed25519_key
+              - key: ssh_host_ed25519_key.pub
+                path: ssh_host_ed25519_key.pub
+    - name: authorized-keys
+      secret:
+          secretName: openclaw-exec-ssh
+          defaultMode: 0444
+          items:
+              - key: authorized_keys
+                path: authorized_keys
+serviceAccount:
+    create: false
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

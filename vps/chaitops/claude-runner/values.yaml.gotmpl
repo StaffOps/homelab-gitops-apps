@@ -1,0 +1,64 @@
+# claude-runner of chaitops (staffops/generic 0.1.0): runs the Claude Code CLI for agent-api. Internal only
+# (Service claude-runner:8000); its only egress is HTTPS to Anthropic.
+fullnameOverride: claude-runner
+image:
+    registry: ghcr.io
+    repository: staffops/chaitops/claude-runner
+    tag: "v0.4.1"
+    digest: sha256:095509625a0f4cf2063c9dffd85889b8f1a3eb2cec36328d90efd790099fd72f
+ports:
+    - name: http
+      containerPort: 8000
+# CLAUDE_CODE_OAUTH_TOKEN (Vault homelab/apps/chaitops/claude-runner, ExternalSecret in chaitops-raw).
+# RUNNER_*, HOME=/home/app and RUNNER_WORK_DIR=/tmp/work come from the image.
+envFrom:
+    - secretRef:
+          name: claude-runner
+livenessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+# /ready returns 503 without a credential: agent-api lists the agent only while the runner is ready
+readinessProbe:
+    httpGet:
+        path: /ready
+        port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 5
+resources:
+    requests:
+        cpu: 20m
+        memory: 512Mi # max 7d 396Mi x 1.3 (about 400 MiB per image request, 2 concurrent)
+    limits:
+        cpu: "1"
+        memory: 1280Mi
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+# Compose tmpfs dirs as disk emptyDirs (a memory-backed emptyDir counts against the memory limit)
+tmpVolume:
+    enabled: true
+    mountPath: /tmp
+    sizeLimit: 256Mi
+extraVolumes:
+    - name: claude-home
+      emptyDir:
+          sizeLimit: 64Mi
+extraVolumeMounts:
+    - name: claude-home
+      mountPath: /home/app/.claude
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

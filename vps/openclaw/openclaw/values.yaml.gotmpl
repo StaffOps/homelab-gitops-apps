@@ -1,0 +1,255 @@
+# OpenClaw gateway (staffops/generic 0.1.0; every key: helm show values staffops/generic --version 0.1.0).
+# One pod, three containers sharing loopback:
+#   openclaw     the gateway (UI, /a2a/v1, /hooks) on 18789; Hermes on the host calls it at the fixed ClusterIP
+#   center-claw  center collector: runs the OpenClaw CLI with --json and ships allowed fields to center ingest.
+#                The gateway password only works for local calls, hence the same pod. It exits after 3 failures
+#                (e.g. while the gateway starts) and the kubelet restarts it.
+#   poller       takes tasks from NATS and runs `node /app/openclaw.mjs agent` against the local gateway
+# Data: hostPath PVs of openclaw-raw (state, config, backups). openclaw.json lives in the state dir (the UI owns it).
+fullnameOverride: openclaw
+nameOverride: openclaw
+containerName: openclaw
+workload:
+    kind: StatefulSet
+image:
+    registry: ghcr.io
+    repository: openclaw/openclaw
+    tag: "2026.10.5"
+    digest: sha256:f40d1e66fd14d8c5b49c832f4100f83b53fdc01f5108f7db11de38fd0ee6dbe5
+# The image entrypoint (tini -s -- node /app/docker-entrypoint.mjs) stays; this is its CMD.
+args: [node, openclaw.mjs, gateway, --bind, lan, --port, "18789"]
+workingDir: /app
+ports:
+    - name: http
+      containerPort: 18789
+env:
+    HOME: /home/node
+    OPENCLAW_HOME: /home/node
+    TERM: xterm-256color
+    OPENCLAW_STATE_DIR: /home/node/.openclaw
+    OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
+    OPENCLAW_CONFIG_DIR: /home/node/.openclaw
+    OPENCLAW_WORKSPACE_DIR: /home/node/.openclaw/workspace
+    OPENCLAW_GATEWAY_PORT: "18789"
+    OPENCLAW_DISABLE_BONJOUR: "1"
+    TZ: America/Fortaleza
+# OPENCLAW_GATEWAY_PASSWORD, OPENCLAW_LLM_API_KEY, A2A_HERMES_TOKEN, A2A_HERMES_OUTBOUND_TOKEN, OPENCLAW_HOOKS_TOKEN,
+# OPENCLAW_TELEGRAM_BOT_TOKEN (Vault homelab/apps/openclaw/openclaw)
+envFrom:
+    - secretRef:
+          name: openclaw
+# /healthz answers 200 off-loopback (/readyz is loopback-only). RSS reaches ~1.2 GiB right after start.
+startupProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 18
+livenessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
+readinessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+# Measured 1.95Gi now, 2357Mi max over 7 days (compose limit 2560m was tight).
+resources:
+    requests:
+        cpu: 100m
+        memory: 2Gi
+    limits:
+        memory: 3Gi
+securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false # the gateway writes inside the image (as in compose)
+    runAsNonRoot: true
+    capabilities:
+        drop: ["ALL"]
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000 # secret files (ssh key, center token) readable by uid 1000; hostPath dirs are chowned on the host
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+podAntiAffinityPreset: ""
+# rw rootfs keeps /tmp in the image, as in compose; center-claw has its own /tmp below
+tmpVolume:
+    enabled: false
+extraVolumeMounts:
+    - name: state
+      mountPath: /home/node/.openclaw
+    - name: config
+      mountPath: /home/node/.config/openclaw
+    - name: backups
+      mountPath: /backups
+    - name: scripts
+      mountPath: /opt/claw-scripts
+      readOnly: true
+    - name: ssh-client
+      mountPath: /home/node/.ssh-sandbox
+      readOnly: true
+extraVolumes:
+    - name: state
+      persistentVolumeClaim:
+          claimName: openclaw-state
+    - name: config
+      persistentVolumeClaim:
+          claimName: openclaw-config
+    - name: backups
+      persistentVolumeClaim:
+          claimName: openclaw-backups
+    # Scripts of the LLM-free automations (root 0755 on the host, the agent cannot change them)
+    - name: scripts
+      hostPath:
+          path: /opt/openclaw/scripts
+          type: Directory
+    # SSH client of the sandbox (id_ed25519, id_ed25519.pub, known_hosts pinning openclaw-exec)
+    - name: ssh-client
+      secret:
+          secretName: openclaw-ssh-client
+          defaultMode: 0400
+    # center binary from the host (extracted by the center role), mounted as /center
+    - name: center-bin
+      hostPath:
+          path: /opt/center/bin/center
+          type: File
+    - name: center-token
+      secret:
+          secretName: center-claw
+          defaultMode: 0400
+          items:
+              - key: token
+                path: token
+    - name: center-tmp
+      emptyDir:
+          sizeLimit: 128Mi
+sidecars:
+    - name: center-claw
+      image: ghcr.io/openclaw/openclaw:2026.10.5@sha256:f40d1e66fd14d8c5b49c832f4100f83b53fdc01f5108f7db11de38fd0ee6dbe5
+      imagePullPolicy: IfNotPresent
+      command: [/center]
+      args:
+          - claw
+          - --id=claw
+          - --name=Claw
+          - --machine=srv1853985
+          - --url=http://center-ingest.center.svc.cluster.local:8081 # Service center-ingest (vps/center); Service center only has 8080
+          - --token-file=/run/center/token
+          - --cli=node /app/openclaw.mjs
+          - --exit-after-failures=3
+      env:
+          - name: HOME
+            value: /tmp
+          - name: OPENCLAW_DISABLE_BONJOUR
+            value: "1"
+          - name: TZ
+            value: America/Fortaleza
+          - name: OPENCLAW_GATEWAY_PASSWORD
+            valueFrom:
+                secretKeyRef:
+                    name: openclaw
+                    key: OPENCLAW_GATEWAY_PASSWORD
+      resources:
+          requests:
+              cpu: 10m
+              memory: 64Mi
+          limits:
+              cpu: 500m
+              memory: 512Mi
+      securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+              drop: ["ALL"]
+      volumeMounts:
+          - name: center-bin
+            mountPath: /center
+            readOnly: true
+          - name: center-token
+            mountPath: /run/center
+            readOnly: true
+          - name: center-tmp
+            mountPath: /tmp
+    - name: poller
+      image: ghcr.io/personalaigent/openclaw-poller:sha-00711f076ee9@sha256:7ad1198eec6a65bb305bbb6a50a80ec98ab7332bb633aec358eb432b057df8a7
+      imagePullPolicy: IfNotPresent
+      # no command: the image entrypoint runs poller.py (OPENCLAW_CLI="node /app/openclaw.mjs" is set in the image)
+      env:
+          - name: HOME
+            value: /home/node
+          - name: OPENCLAW_HOME
+            value: /home/node
+          - name: OPENCLAW_STATE_DIR
+            value: /home/node/.openclaw
+          - name: OPENCLAW_CONFIG_PATH
+            value: /home/node/.openclaw/openclaw.json
+          - name: OPENCLAW_CONFIG_DIR
+            value: /home/node/.openclaw
+          - name: OPENCLAW_WORKSPACE_DIR
+            value: /home/node/.openclaw/workspace
+          - name: OPENCLAW_GATEWAY_PORT
+            value: "18789"
+          - name: OPENCLAW_DISABLE_BONJOUR
+            value: "1"
+          - name: TZ
+            value: America/Fortaleza
+          - name: OPENCLAW_GATEWAY_PASSWORD
+            valueFrom:
+                secretKeyRef:
+                    name: openclaw
+                    key: OPENCLAW_GATEWAY_PASSWORD
+      # NATS_URL, NATS_USER, NATS_PASSWORD (Vault homelab/apps/openclaw/poller)
+      envFrom:
+          - secretRef:
+                name: poller
+      resources:
+          requests:
+              cpu: 10m
+              memory: 48Mi
+          limits:
+              memory: 256Mi
+      securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false # runs the OpenClaw CLI, which writes under $HOME like the gateway
+          runAsNonRoot: true
+          capabilities:
+              drop: ["ALL"]
+      volumeMounts:
+          - name: state
+            mountPath: /home/node/.openclaw
+service:
+    clusterIP: 10.43.100.50 # fixed: Hermes on the host calls http://10.43.100.50:18789/a2a/v1
+# claw.<domain> keeps its manual DNS record (no external-dns annotation)
+ingress:
+    enabled: true
+    className: {{ .Values.ingress.className }}
+    annotations:
+        cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        traefik.ingress.kubernetes.io/router.middlewares: openclaw-strip-remote-headers@kubernetescrd,openclaw-authelia@kubernetescrd
+    hosts:
+        - host: claw.{{ .Values.domain }}
+          paths:
+              - path: /
+                pathType: Prefix
+    tls:
+        - secretName: claw-tls
+          hosts:
+              - claw.{{ .Values.domain }}
+serviceAccount:
+    create: false
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

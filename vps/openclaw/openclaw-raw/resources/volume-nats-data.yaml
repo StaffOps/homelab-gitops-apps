@@ -1,0 +1,29 @@
+# NATS JetStream store (/data; max_file_store 1G), uid 1000 mode 0700.
+# hostPath /opt/openclaw/nats/data on the VPS disk (the docker compose directory); owner and mode are set on the host.
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: openclaw-nats-data
+  spec:
+      capacity:
+          storage: 2Gi
+      accessModes: [ReadWriteOnce]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: ""
+      claimRef:
+          namespace: openclaw
+          name: openclaw-nats-data
+      hostPath:
+          path: /opt/openclaw/nats/data
+          type: {{ .Values.storage.hostPathType }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+      name: openclaw-nats-data
+  spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: ""
+      volumeName: openclaw-nats-data
+      resources:
+          requests:
+              storage: 2Gi

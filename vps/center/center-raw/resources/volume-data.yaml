@@ -1,0 +1,29 @@
+# center data on the VPS disk (center.db and tokens/<host>.token, read by the host's center-agent too): static
+# hostPath PersistentVolume bound to PVC center-data. Owner 1001:1001 (the pod's runAsUser).
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: center-data
+  spec:
+      capacity:
+          storage: 1Gi
+      accessModes: [ReadWriteOnce]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: ""
+      claimRef:
+          namespace: center
+          name: center-data
+      hostPath:
+          path: /opt/projects/center/data
+          type: {{ .Values.storage.hostPathType }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+      name: center-data
+  spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: ""
+      volumeName: center-data
+      resources:
+          requests:
+              storage: 1Gi

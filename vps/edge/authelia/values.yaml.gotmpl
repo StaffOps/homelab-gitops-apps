@@ -1,0 +1,140 @@
+# Authelia (staffops/generic 0.1.0; every key: helm show values staffops/generic --version 0.1.0). The SSO portal
+# auth.<domain> and the forwardAuth endpoints the Traefik Middlewares of every namespace call
+# (authelia.edge.svc:9091). Config = ConfigMap (configuration.yml.gotmpl), users = Secret authelia-users (read-only
+# file), db.sqlite3 + notification.txt = hostPath PV /opt/edge/authelia (owned 1000:1000). Restarting it drops
+# every session.
+fullnameOverride: authelia
+image:
+    registry: docker.io
+    repository: authelia/authelia
+    tag: "4.39.28"
+    digest: sha256:bd97cff4fcbf715b5ff1f9ae286afbe6033afce385302520b0368122d43a6f54
+workload:
+    strategy:
+        type: Recreate # one writer of the sqlite db on the hostPath
+ports:
+    - name: http
+      containerPort: 9091
+    - name: metrics
+      containerPort: 9959
+env:
+    # The entrypoint runs authelia directly when the uid is not 0 (no chown, no su-exec)
+    X_AUTHELIA_CONFIG: /etc/authelia/config/configuration.yml
+    AUTHELIA_SESSION_SECRET:
+        valueFrom:
+            secretKeyRef:
+                name: authelia
+                key: AUTHELIA_SESSION_SECRET
+    AUTHELIA_STORAGE_ENCRYPTION_KEY:
+        valueFrom:
+            secretKeyRef:
+                name: authelia
+                key: AUTHELIA_STORAGE_ENCRYPTION_KEY
+    AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET:
+        valueFrom:
+            secretKeyRef:
+                name: authelia
+                key: AUTHELIA_JWT_SECRET
+configMaps:
+    config:
+        mountPath: /etc/authelia/config
+        data:
+            configuration.yml: |
+                {{- tpl (readFile "configuration.yml.gotmpl") . | nindent 16 }}
+# Sibling of the config mount (a mount point inside a ConfigMap volume cannot be created)
+extraVolumes:
+    - name: users
+      secret:
+          secretName: authelia-users
+          defaultMode: 0440
+extraVolumeMounts:
+    - name: users
+      mountPath: /etc/authelia/users
+      readOnly: true
+persistence:
+    enabled: true
+    existingClaim: authelia-data # edge-raw/resources/volume-authelia.yaml
+    mountPath: /config
+livenessProbe:
+    httpGet:
+        path: /api/health
+        port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 3
+readinessProbe:
+    httpGet:
+        path: /api/health
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+resources:
+    requests:
+        cpu: 10m
+        memory: 64Mi
+    limits:
+        memory: 256Mi
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+tmpVolume:
+    enabled: true
+    sizeLimit: 64Mi
+podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9959"
+    prometheus.io/path: /metrics
+podAntiAffinityPreset: ""
+ingress:
+    enabled: true
+    className: {{ .Values.ingress.className }}
+    annotations:
+        cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        # No forwardAuth on Authelia itself. strip-remote-headers still runs: no client-sent Remote-* header.
+        traefik.ingress.kubernetes.io/router.middlewares: edge-strip-remote-headers@kubernetescrd
+    hosts:
+        - host: auth.{{ .Values.domain }}
+          paths:
+              - path: /
+                pathType: Prefix
+                port: http
+    tls:
+        - secretName: auth-tls
+          hosts:
+              - auth.{{ .Values.domain }}
+networkPolicy:
+    enabled: true
+    policyTypes: [Ingress, Egress]
+    ingress:
+        # Portal (auth.<domain>) and forwardAuth: every namespace's Middlewares are executed by the Traefik pod
+        - from:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                podSelector:
+                    matchLabels:
+                        app.kubernetes.io/name: traefik
+          ports:
+              - port: 9091
+                protocol: TCP
+        # Metrics: Alloy
+        - from:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: monitoring
+          ports:
+              - port: 9959
+                protocol: TCP
+    # DNS only (allowDNS): local sqlite, filesystem notifier, no SMTP. NTP startup check fails open (a warning).
+    egress: []
+    allowDNS: true
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

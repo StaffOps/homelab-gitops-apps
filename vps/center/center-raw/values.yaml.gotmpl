@@ -1,0 +1,5 @@
+# One file per object in resources/, rendered with the helmfile values (tpl).
+resources:
+    {{- range $f := readDir "./resources" }}
+    {{- tpl (readFile (printf "./%s" $f)) $ | nindent 4 }}
+    {{- end }}

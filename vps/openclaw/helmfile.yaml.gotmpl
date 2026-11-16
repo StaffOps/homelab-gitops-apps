@@ -1,0 +1,53 @@
+# OpenClaw on the VPS k3s: the agent gateway (claw.<domain>, behind Authelia) with its center collector and NATS
+# poller as sidecars, the NATS JetStream task queue, and the SSH execution sandbox the agent runs commands in.
+# Releases: openclaw (StatefulSet + center-claw + poller), nats (StatefulSet + exporter), openclaw-exec (Deployment),
+# all on staffops/generic; openclaw-raw = SecretStore, ExternalSecrets, hostPath PersistentVolumes, Traefik
+# Middlewares and NetworkPolicies (bedag/raw, one file per object).
+repositories:
+    - name: staffops
+      url: https://staffops.github.io/helm-charts
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - openclaw:
+                  enabled: true
+            - nats:
+                  enabled: true
+            - openclaw-exec:
+                  enabled: true
+            - openclaw-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: staffops/generic
+      name: openclaw
+      namespace: openclaw
+      condition: openclaw.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./openclaw/values.yaml.gotmpl
+    - chart: staffops/generic
+      name: nats
+      namespace: openclaw
+      condition: nats.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./nats/values.yaml.gotmpl
+    - chart: staffops/generic
+      name: openclaw-exec
+      namespace: openclaw
+      condition: openclaw-exec.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./openclaw-exec/values.yaml.gotmpl
+    - chart: bedag/raw
+      name: openclaw-raw
+      namespace: openclaw
+      condition: openclaw-raw.enabled
+      version: '{{ index .Values "openclaw-raw" "version" }}'
+      values:
+          - ./openclaw-raw/values.yaml.gotmpl

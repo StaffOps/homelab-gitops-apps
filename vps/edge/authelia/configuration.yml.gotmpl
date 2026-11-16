@@ -1,0 +1,124 @@
+## Authelia configuration (image 4.39). Read through tpl by values.yaml.gotmpl: hostnames come from the helmfile
+## values, so the Authelia "template" config filter is not used. Secrets (session, storage encryption, reset
+## password JWT) come from env vars (Secret authelia).
+theme: light
+
+server:
+    address: 'tcp://:9091'
+    # Do not write /app/.healthcheck.env: the root filesystem is read-only (Authelia exits on that write) and the
+    # kubelet probes GET /api/health instead of the image's healthcheck.sh.
+    disable_healthcheck: true
+    endpoints:
+        authz:
+            # Cookie session only (browser). Used by every site behind the Middleware "authelia".
+            forward-auth:
+                implementation: 'ForwardAuth'
+                authn_strategies:
+                    - name: 'CookieSession'
+            # Authorization: Basic (git CLI), only for the mentoria /git/ path (Middleware "authelia-basic" there).
+            forward-auth-basic:
+                implementation: 'ForwardAuth'
+                authn_strategies:
+                    - name: 'HeaderAuthorization'
+                      schemes: ['Basic']
+
+log:
+    level: info
+
+# Prometheus metrics; scraped by Alloy through the pod's prometheus.io annotations.
+telemetry:
+    metrics:
+        enabled: true
+        address: 'tcp://:9959'
+
+totp:
+    issuer: {{ .Values.domain }}
+
+identity_validation:
+    reset_password:
+        # jwt_secret provided via AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET
+        {}
+
+authentication_backend:
+    # The users database is the Secret authelia-users mounted read-only: Authelia cannot write it, so the
+    # self-service password reset is off (change a password in Vault homelab/apps/edge/authelia-users).
+    password_reset:
+        disable: true
+    file:
+        path: /etc/authelia/users/users_database.yml
+        password:
+            algorithm: argon2
+
+access_control:
+    default_policy: deny
+    rules:
+        # Mentoria presentations: only the user staffops (before the general rule of the domain: the first match wins).
+        - domain: 'mentoria.{{ .Values.domain }}'
+          resources:
+              - '^/assets/presentation([/?].*)?$'
+          policy: one_factor
+          subject:
+              - 'user:staffops'
+        # ...and nobody else: a rule whose subject does not match is skipped, so without this deny a mentee would fall
+        # through to the general rule below.
+        - domain: 'mentoria.{{ .Values.domain }}'
+          resources:
+              - '^/assets/presentation([/?].*)?$'
+          policy: deny
+
+        # Mentoria portal: mentees and admins.
+        - domain: 'mentoria.{{ .Values.domain }}'
+          policy: one_factor
+          subject:
+              - 'group:mentorados'
+              - 'group:admins'
+
+        # Everything else is operations: admins ONLY. A rule without a subject lets any authenticated user in; never
+        # add a domain without one.
+        - domain: 'docs.{{ .Values.domain }}'
+          policy: one_factor
+          subject:
+              - 'group:admins'
+        - domain: 'hermes.{{ .Values.domain }}'
+          policy: one_factor
+          subject:
+              - 'group:admins'
+        - domain: 'grafana.{{ .Values.domain }}'
+          policy: one_factor
+          subject:
+              - 'group:admins'
+        - domain: 'center.{{ .Values.domain }}'
+          policy: one_factor
+          subject:
+              - 'group:admins'
+        - domain: 'prometheus.{{ .Values.domain }}'
+          policy: one_factor
+          subject:
+              - 'group:admins'
+        - domain: '9router.{{ .Values.domain }}'
+          policy: one_factor
+          subject:
+              - 'group:admins'
+        # OpenClaw: only the user staffops.
+        - domain: 'claw.{{ .Values.domain }}'
+          policy: one_factor
+          subject:
+              - 'user:staffops'
+
+session:
+    # secret provided via AUTHELIA_SESSION_SECRET
+    cookies:
+        - domain: '{{ .Values.domain }}'
+          authelia_url: '{{ .Values.authelia.url }}'
+          default_redirection_url: 'https://claw.{{ .Values.domain }}'
+          expiration: 1h
+          inactivity: 15m
+
+storage:
+    # encryption_key provided via AUTHELIA_STORAGE_ENCRYPTION_KEY
+    local:
+        path: /config/db.sqlite3
+
+notifier:
+    filesystem:
+        filename: /config/notification.txt

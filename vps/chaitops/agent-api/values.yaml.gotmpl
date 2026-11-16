@@ -1,0 +1,83 @@
+# agent-api of chaitops (staffops/generic 0.1.0; every key: helm show values staffops/generic --version 0.1.0).
+# OpenAI-compatible /v1 for Hermes (host) and 9router (namespace edge); it forwards to claude-runner.
+fullnameOverride: agent-api
+image:
+    registry: ghcr.io
+    repository: staffops/chaitops/agent-api
+    tag: "v0.4.1"
+    digest: sha256:c495a37c315a9958749206ea7c493dfa5abdfc76f65b2b1fce9c96a627e048dc
+ports:
+    - name: http
+      containerPort: 8000
+env:
+    AUTH_REQUIRED: "true"
+    MAX_CONCURRENT_REQUESTS: "2" # bounds image-decode memory (~400 MiB per request in the runner)
+    REQUEST_TIMEOUT_SECONDS: "300"
+    RUNNER_TIMEOUT_GRACE_SECONDS: "10"
+    CLAUDE_RUNNER_URL: http://claude-runner:8000
+# API_KEYS (Vault homelab/apps/chaitops/agent-api, ExternalSecret in chaitops-raw)
+envFrom:
+    - secretRef:
+          name: agent-api
+# Agent definitions (personal-assistant infra/chaitops/config/agents/, no secrets)
+configMaps:
+    agents:
+        mountPath: /etc/staffops/agents
+        data:
+            claude.yaml: |
+                name: claude
+                description: "Claude Code CLI (Anthropic)"
+                sidecar_url: http://claude-runner:8000
+                timeout_seconds: 900
+                # No required_env: the credential (CLAUDE_CODE_OAUTH_TOKEN from .env.claude or
+                # ANTHROPIC_API_KEY) lives in the claude-runner, not in the gateway. The agent
+                # is listed only while the runner reports /ready.
+livenessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+readinessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+resources:
+    requests:
+        cpu: 10m
+        memory: 100Mi # max 7d 76Mi x 1.3
+    limits:
+        cpu: "1"
+        memory: 768Mi
+# The image has no USER and runs as root today (compose has no user:, facts 2026-11-15); it was never tested
+# non-root. Kept as root, with read-only root, no capabilities and no privilege escalation.
+podSecurityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+    runAsGroup: 0
+    fsGroup: null
+    fsGroupChangePolicy: null
+    seccompProfile:
+        type: RuntimeDefault
+securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: false
+    capabilities:
+        drop: ["ALL"]
+tmpVolume:
+    enabled: true
+    mountPath: /tmp
+    sizeLimit: 64Mi
+# Fixed address: Hermes on the host calls http://10.43.100.10:8000/v1
+service:
+    clusterIP: 10.43.100.10
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

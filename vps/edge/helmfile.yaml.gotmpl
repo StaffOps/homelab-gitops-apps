@@ -1,0 +1,44 @@
+# edge on the VPS k3s: the authentication and AI-routing front of the VPS. Release authelia = the SSO portal
+# (auth.<domain>) and the forwardAuth endpoint every protected site calls; ninerouter = 9router, the
+# OpenAI-compatible LLM router (9router.<domain>, fixed ClusterIP for the host's Hermes); edge-raw = SecretStore,
+# ExternalSecrets, PersistentVolumes, Traefik Middlewares and the hermes.<domain> Ingress to the Hermes dashboard
+# on the host (bedag/raw, one file per object).
+repositories:
+    - name: staffops
+      url: https://staffops.github.io/helm-charts
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - authelia:
+                  enabled: true
+            - ninerouter:
+                  enabled: true
+            - edge-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: staffops/generic
+      name: authelia
+      namespace: edge
+      condition: authelia.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./authelia/values.yaml.gotmpl
+    - chart: staffops/generic
+      name: ninerouter
+      namespace: edge
+      condition: ninerouter.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./ninerouter/values.yaml.gotmpl
+    - chart: bedag/raw
+      name: edge-raw
+      namespace: edge
+      condition: edge-raw.enabled
+      version: '{{ index .Values "edge-raw" "version" }}'
+      values:
+          - ./edge-raw/values.yaml.gotmpl

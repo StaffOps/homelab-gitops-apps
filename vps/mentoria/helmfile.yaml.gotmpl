@@ -1,0 +1,34 @@
+# mentoria on the VPS k3s: the mentoring portal (Caddy image with the site, the git repos and install.sh baked in) at
+# mentoria.<domain>. Release mentoria-portal = the workload (staffops/generic); mentoria-raw = Traefik Middlewares,
+# the three Ingresses (public /install.sh, /git behind Authelia basic auth, the site behind the Authelia browser
+# login) and the NetworkPolicy (bedag/raw, one file per object). No secrets.
+repositories:
+    - name: staffops
+      url: https://staffops.github.io/helm-charts
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - mentoria-portal:
+                  enabled: true
+            - mentoria-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: staffops/generic
+      name: mentoria-portal
+      namespace: mentoria
+      condition: mentoria-portal.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./mentoria-portal/values.yaml.gotmpl
+    - chart: bedag/raw
+      name: mentoria-raw
+      namespace: mentoria
+      condition: mentoria-raw.enabled
+      version: '{{ index .Values "mentoria-raw" "version" }}'
+      values:
+          - ./mentoria-raw/values.yaml.gotmpl

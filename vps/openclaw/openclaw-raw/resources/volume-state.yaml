@@ -1,0 +1,29 @@
+# OpenClaw state (/home/node/.openclaw: openclaw.json, workspace, sessions), uid 1000 mode 0700. Also mounted by the poller sidecar.
+# hostPath /opt/openclaw/state on the VPS disk (the docker compose directory); owner and mode are set on the host.
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: openclaw-state
+  spec:
+      capacity:
+          storage: 2Gi
+      accessModes: [ReadWriteOnce]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: ""
+      claimRef:
+          namespace: openclaw
+          name: openclaw-state
+      hostPath:
+          path: /opt/openclaw/state
+          type: {{ .Values.storage.hostPathType }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+      name: openclaw-state
+  spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: ""
+      volumeName: openclaw-state
+      resources:
+          requests:
+              storage: 2Gi

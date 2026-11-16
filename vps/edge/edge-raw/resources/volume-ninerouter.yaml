@@ -1,0 +1,29 @@
+# 9router's data on the VPS disk: the sqlite db with the provider API keys (sensitive; covered by the backup) and
+# jwt-secret. Moved from the Docker volume 9router-data to /opt/edge/9router, owned 1000:1000 (the pod's uid).
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: edge-ninerouter
+  spec:
+      capacity:
+          storage: 1Gi
+      accessModes: [ReadWriteOnce]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: ""
+      claimRef:
+          namespace: edge
+          name: ninerouter-data
+      hostPath:
+          path: /opt/edge/9router
+          type: {{ .Values.storage.hostPathType }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+      name: ninerouter-data
+  spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: ""
+      volumeName: edge-ninerouter
+      resources:
+          requests:
+              storage: 1Gi

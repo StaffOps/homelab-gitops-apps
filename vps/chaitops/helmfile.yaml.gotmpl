@@ -1,0 +1,44 @@
+# chaitops on the VPS k3s: an OpenAI-compatible gateway (agent-api) in front of the Claude Code CLI (claude-runner),
+# backed by the owner's personal Claude subscription. Internal only, never published (ADR-0003/0012 of chaitops):
+# Hermes on the host calls agent-api at its fixed ClusterIP 10.43.100.10:8000 and 9router (namespace edge) uses it as
+# a provider. Releases: agent-api and claude-runner (staffops/generic); chaitops-raw = SecretStore, ExternalSecrets
+# and NetworkPolicies (bedag/raw, one file per object).
+repositories:
+    - name: staffops
+      url: https://staffops.github.io/helm-charts
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - agent-api:
+                  enabled: true
+            - claude-runner:
+                  enabled: true
+            - chaitops-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: staffops/generic
+      name: agent-api
+      namespace: chaitops
+      condition: agent-api.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./agent-api/values.yaml.gotmpl
+    - chart: staffops/generic
+      name: claude-runner
+      namespace: chaitops
+      condition: claude-runner.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./claude-runner/values.yaml.gotmpl
+    - chart: bedag/raw
+      name: chaitops-raw
+      namespace: chaitops
+      condition: chaitops-raw.enabled
+      version: '{{ index .Values "chaitops-raw" "version" }}'
+      values:
+          - ./chaitops-raw/values.yaml.gotmpl

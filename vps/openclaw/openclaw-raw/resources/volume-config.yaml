@@ -1,0 +1,29 @@
+# OpenClaw config dir (/home/node/.config/openclaw), uid 1000 mode 0700.
+# hostPath /opt/openclaw/config on the VPS disk (the docker compose directory); owner and mode are set on the host.
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: openclaw-config
+  spec:
+      capacity:
+          storage: 64Mi
+      accessModes: [ReadWriteOnce]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: ""
+      claimRef:
+          namespace: openclaw
+          name: openclaw-config
+      hostPath:
+          path: /opt/openclaw/config
+          type: {{ .Values.storage.hostPathType }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+      name: openclaw-config
+  spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: ""
+      volumeName: openclaw-config
+      resources:
+          requests:
+              storage: 64Mi

@@ -1,0 +1,17 @@
+# Ingest at a fixed address: the host's center-agent posts to http://10.43.100.60:8081 (the openclaw center-claw
+# sidecar may use center-ingest.center.svc.cluster.local:8081). Not referenced by any Ingress.
+- apiVersion: v1
+  kind: Service
+  metadata:
+      name: center-ingest
+  spec:
+      type: ClusterIP
+      clusterIP: 10.43.100.60
+      selector:
+          app.kubernetes.io/name: center
+          app.kubernetes.io/instance: center
+      ports:
+          - name: ingest
+            port: 8081
+            targetPort: ingest
+            protocol: TCP

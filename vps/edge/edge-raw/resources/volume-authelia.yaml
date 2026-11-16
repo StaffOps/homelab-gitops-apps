@@ -1,0 +1,30 @@
+# Authelia's state on the VPS disk: db.sqlite3 (sessions, TOTP, encrypted with AUTHELIA_STORAGE_ENCRYPTION_KEY) and
+# notification.txt. The directory must be owned 1000:1000 (the pod's uid). configuration.yml and users_database.yml
+# there are no longer read (ConfigMap and Secret).
+- apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+      name: edge-authelia
+  spec:
+      capacity:
+          storage: 1Gi
+      accessModes: [ReadWriteOnce]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: ""
+      claimRef:
+          namespace: edge
+          name: authelia-data
+      hostPath:
+          path: /opt/edge/authelia
+          type: {{ .Values.storage.hostPathType }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+      name: authelia-data
+  spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: ""
+      volumeName: edge-authelia
+      resources:
+          requests:
+              storage: 1Gi

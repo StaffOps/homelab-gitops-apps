@@ -1,0 +1,49 @@
+# mentoria-portal (staffops/generic 0.1.0; every key: helm show values staffops/generic --version 0.1.0).
+# Caddy (admin off) serves /healthz, /install.sh, /git/* and the site from the image. Exposure: Ingresses in
+# mentoria-raw (one per auth mode).
+fullnameOverride: mentoria-portal
+image:
+    registry: ghcr.io
+    repository: staffops-mentoring/mentoria-portal
+    tag: "main"
+    digest: sha256:d943102b8afe7b22a21099f10eac440702aa8010fb5b8cbc2e9c317bb8802586
+ports:
+    - name: http
+      containerPort: 8080
+livenessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+readinessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+resources:
+    requests:
+        cpu: 5m
+        memory: 16Mi # smoke test max 3Mi
+    limits:
+        memory: 64Mi
+podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+        type: RuntimeDefault
+# XDG_CONFIG_HOME and XDG_DATA_HOME of the image live under /tmp
+tmpVolume:
+    enabled: true
+    mountPath: /tmp
+    sizeLimit: 64Mi
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

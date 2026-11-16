@@ -1,0 +1,24 @@
+# mentoria.<domain>/install.sh: public on purpose (bootstrap script for a new mentee), no middleware.
+- apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+      name: mentoria-portal-install
+      annotations:
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  spec:
+      ingressClassName: {{ .Values.ingress.className }}
+      tls:
+          - secretName: mentoria-tls
+            hosts:
+                - mentoria.{{ .Values.domain }}
+      rules:
+          - host: mentoria.{{ .Values.domain }}
+            http:
+                paths:
+                    - path: /install.sh
+                      pathType: Exact
+                      backend:
+                          service:
+                              name: mentoria-portal
+                              port:
+                                  name: http
