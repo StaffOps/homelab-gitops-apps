@@ -1,8 +1,0 @@
-# Sandbox of the Argo CD Image Updater trial (homelab-gitops helm-charts/argocd-image-updater, Application
-# image-updater-demo on the VPS). A plain Helm chart, not helmfile: the Image Updater only edits Helm/Kustomize
-# sources. It commits the newest podinfo 6.x tag into values.yaml (image.tag). Delete this directory and the
-# Application to end the trial.
-apiVersion: v2
-name: image-updater-demo
-version: 0.1.0
-appVersion: "6.x"
