@@ -243,11 +243,12 @@ sidecars:
           - secretRef:
                 name: poller
       resources:
+          # Each task runs an OpenClaw CLI (node/V8, >300 MB RSS) inside this container next to python: 256Mi OOMKilled it
           requests:
               cpu: 10m
-              memory: 48Mi
+              memory: 192Mi
           limits:
-              memory: 256Mi
+              memory: 768Mi
       securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false # runs the OpenClaw CLI, which writes under $HOME like the gateway
