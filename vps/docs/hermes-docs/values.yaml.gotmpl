@@ -63,3 +63,13 @@ tests:
     enabled: false
 pdb:
     enabled: false # single node: a PDB only blocks drains
+# The official caddy binary carries the file capability cap_net_bind_service: with every capability dropped the
+# exec fails ("operation not permitted"). Keep NET_BIND_SERVICE in the bounding set (port 8080 does not need it);
+# the image dropping the file capability (setcap -r) would remove this exception.
+securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+        drop: ["ALL"]
+        add: ["NET_BIND_SERVICE"]
