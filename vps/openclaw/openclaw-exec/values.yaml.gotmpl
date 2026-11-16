@@ -17,12 +17,14 @@ ports:
     - name: ssh
       containerPort: 2222
 livenessProbe:
+    httpGet: null # drop the chart default (one handler per probe)
     tcpSocket:
         port: ssh
     periodSeconds: 30
     timeoutSeconds: 5
     failureThreshold: 3
 readinessProbe:
+    httpGet: null # drop the chart default (one handler per probe)
     tcpSocket:
         port: ssh
     periodSeconds: 10

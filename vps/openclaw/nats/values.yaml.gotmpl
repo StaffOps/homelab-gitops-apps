@@ -23,12 +23,14 @@ env:
     GOMEMLIMIT: 230MiB
 # The monitoring port listens on 127.0.0.1 only, so an httpGet probe (pod IP) cannot reach it: exec wget instead.
 livenessProbe:
+    httpGet: null # drop the chart default (one handler per probe)
     exec:
         command: [wget, -q, -O, /dev/null, "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
     periodSeconds: 30
     timeoutSeconds: 5
     failureThreshold: 3
 readinessProbe:
+    httpGet: null # drop the chart default (one handler per probe)
     exec:
         command: [wget, -q, -O, /dev/null, "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
     periodSeconds: 10

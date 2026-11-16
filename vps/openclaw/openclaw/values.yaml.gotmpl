@@ -123,16 +123,45 @@ extraVolumes:
       hostPath:
           path: /opt/center/bin/center
           type: File
-    - name: center-token
+    # center refuses a token readable by group/others (mode & 077); with fsGroup a Secret file is 0440, so the
+    # initContainer center-token copies it as 0600 into a memory emptyDir that center-claw reads
+    - name: center-token-src
       secret:
           secretName: center-claw
           defaultMode: 0400
           items:
               - key: token
                 path: token
+    - name: center-token
+      emptyDir:
+          medium: Memory
+          sizeLimit: 1Mi
     - name: center-tmp
       emptyDir:
           sizeLimit: 128Mi
+initContainers:
+    - name: center-token
+      image: ghcr.io/openclaw/openclaw:2026.10.5@sha256:f40d1e66fd14d8c5b49c832f4100f83b53fdc01f5108f7db11de38fd0ee6dbe5
+      imagePullPolicy: IfNotPresent
+      command: [install, -m, "600", /secret/token, /run/center/token]
+      resources:
+          requests:
+              cpu: 5m
+              memory: 8Mi
+          limits:
+              memory: 32Mi
+      securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+              drop: ["ALL"]
+      volumeMounts:
+          - name: center-token-src
+            mountPath: /secret
+            readOnly: true
+          - name: center-token
+            mountPath: /run/center
 sidecars:
     - name: center-claw
       image: ghcr.io/openclaw/openclaw:2026.10.5@sha256:f40d1e66fd14d8c5b49c832f4100f83b53fdc01f5108f7db11de38fd0ee6dbe5
