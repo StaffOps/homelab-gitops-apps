@@ -1,0 +1,30 @@
+{{- if index .Values "openclaw-raw" "hooksIngress" }}
+# The central Alertmanager (k8s01) posts the VPS alerts to OpenClaw at https://claw.<domain>/hooks/alertmanager
+# (homelab-gitops alerting.openclaw). Only this exact path skips Authelia (a machine cannot log in there); OpenClaw
+# checks the hooks bearer token (OPENCLAW_HOOKS_TOKEN) itself. Traefik prefers this longer rule over the "/" one.
+# Same certificate as the main Ingress (Secret claw-tls, issued through it), so no cert-manager annotation here.
+- apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+      name: openclaw-hooks
+      annotations:
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.middlewares: openclaw-strip-remote-headers@kubernetescrd
+  spec:
+      ingressClassName: {{ .Values.ingress.className }}
+      rules:
+          - host: claw.{{ .Values.domain }}
+            http:
+                paths:
+                    - path: /hooks/alertmanager
+                      pathType: Exact
+                      backend:
+                          service:
+                              name: openclaw
+                              port:
+                                  number: 18789
+      tls:
+          - secretName: claw-tls
+            hosts:
+                - claw.{{ .Values.domain }}
+{{- end }}

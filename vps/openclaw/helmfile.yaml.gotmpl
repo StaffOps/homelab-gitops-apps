@@ -21,6 +21,9 @@ environments:
             - openclaw-raw:
                   enabled: true
                   version: 2.0.2
+                  # /hooks/alertmanager on claw.<domain> without Authelia, for the central Alertmanager on k8s01
+                  # (resources/ingress-hooks.yaml). Off until homelab-gitops alerting.openclaw is turned on.
+                  hooksIngress: false
 ---
 releases:
     - chart: staffops/generic
