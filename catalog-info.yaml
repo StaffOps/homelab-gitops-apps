@@ -8,6 +8,8 @@ metadata:
   description: "Applications for the StaffOps homelab platform: one helmfile directory per app, deployed by Argo CD from homelab-gitops."
   annotations:
     github.com/project-slug: StaffOps/homelab-gitops-apps
+    backstage.io/techdocs-ref: dir:.
+  tags: [helmfile, helm, kubernetes, k3s, argocd]
   links:
     - url: https://github.com/StaffOps/homelab-gitops-apps
       title: Repository
@@ -24,7 +26,8 @@ metadata:
   description: "Applications for the StaffOps homelab platform: one helmfile directory per app, deployed by Argo CD from homelab-gitops."
   annotations:
     github.com/project-slug: StaffOps/homelab-gitops-apps
-  tags: [go-template]
+    backstage.io/techdocs-ref: dir:.
+  tags: [helmfile, kubernetes, k3s]
 spec:
   type: infrastructure
   lifecycle: production

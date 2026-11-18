@@ -1,0 +1,10 @@
+site_name: homelab-gitops-apps
+site_description: "Applications for the StaffOps homelab platform: one helmfile directory per app, deployed by Argo CD from homelab-gitops."
+repo_url: https://github.com/StaffOps/homelab-gitops-apps
+edit_uri: edit/main/docs/
+
+nav:
+  - Home: index.md
+
+plugins:
+  - techdocs-core
