@@ -1,0 +1,22 @@
+# rollout-demo: a throwaway nginx deployed as an Argo Rollout (canary), to try the Rollout tab of Argo CD and the
+# promote/abort flow. No data, no secrets. Delete the directory when done (Argo CD prunes it).
+# Try it: change VERSION in rollout-demo/resources/rollout.yaml, push, then watch and promote in Argo CD.
+repositories:
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - rollout-demo:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: bedag/raw
+      name: rollout-demo
+      namespace: rollout-demo
+      condition: rollout-demo.enabled
+      version: '{{ index .Values "rollout-demo" "version" }}'
+      values:
+          - ./rollout-demo/values.yaml.gotmpl

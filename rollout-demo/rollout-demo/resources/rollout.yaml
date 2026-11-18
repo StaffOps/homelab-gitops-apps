@@ -1,0 +1,61 @@
+# Canary in 4 steps over the 5 replicas (no traffic router: the weight is the share of new pods behind the Service).
+# 20 % → waits for a manual Promote → 60 % → 30 s → 100 %. Abort returns to the stable revision.
+- apiVersion: argoproj.io/v1alpha1
+  kind: Rollout
+  metadata:
+      name: rollout-demo
+  spec:
+      replicas: 5
+      revisionHistoryLimit: 3
+      selector:
+          matchLabels:
+              app: rollout-demo
+      strategy:
+          canary:
+              steps:
+                  - setWeight: 20
+                  - pause: {}
+                  - setWeight: 60
+                  - pause:
+                        duration: 30s
+      template:
+          metadata:
+              labels:
+                  app: rollout-demo
+          spec:
+              automountServiceAccountToken: false
+              securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                      type: RuntimeDefault
+              containers:
+                  - name: nginx
+                    image: nginxinc/nginx-unprivileged:1.29.3-alpine@sha256:5aea7cc516b419e3526f47dd1531be31a56a046cfe44754d94f9383e13e2ee99
+                    env:
+                        # change it to start a new revision (canary)
+                        - name: VERSION
+                          value: "v1"
+                    ports:
+                        - name: http
+                          containerPort: 8080
+                    readinessProbe:
+                        httpGet:
+                            path: /
+                            port: http
+                    resources:
+                        requests:
+                            cpu: 5m
+                            memory: 16Mi
+                        limits:
+                            memory: 32Mi
+                    securityContext:
+                        allowPrivilegeEscalation: false
+                        readOnlyRootFilesystem: true
+                        capabilities:
+                            drop: [ALL]
+                    volumeMounts:
+                        - name: tmp
+                          mountPath: /tmp
+              volumes:
+                  - name: tmp
+                    emptyDir: {}
