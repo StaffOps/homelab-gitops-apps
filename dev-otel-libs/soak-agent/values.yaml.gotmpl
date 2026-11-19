@@ -18,6 +18,8 @@ processors:
     k8sattributes:
         passthrough: true
     batch: {}
+    # The count connector emits deltas; the Prometheus exporter needs cumulative counters or it keeps the last batch
+    deltatocumulative: {}
 connectors:
     # Exact counts per service and environment of everything that passes through
     count:
@@ -79,7 +81,7 @@ service:
             exporters: [otlp_grpc/agent, count]
         metrics/count:
             receivers: [count]
-            processors: [batch]
+            processors: [deltatocumulative]
             exporters: [prometheus/count]
 ` $bp (ternary "64" "400" $bp) (ternary "16" "100" $bp) }}
 resources:
