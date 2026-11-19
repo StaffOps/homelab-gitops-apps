@@ -1,0 +1,26 @@
+# dev-otel-libs: test namespace of StaffOps/otel-libs. The demo apps there are applied by the otel-libs scripts; only
+# the soak Collector lives here (GitOps). Namespace labels (part-of, purpose) are set by those scripts.
+repositories:
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - soak-agent:
+                  enabled: true
+                  version: 2.0.2
+                  # Back-pressure switch for soak runs: true shrinks the memory_limiter so the copy refuses data
+                  # (the otel-libs session asks for it; flip, push, Argo CD rolls the pod). Normal: false.
+                  backpressure: false
+---
+releases:
+    # soak-agent: a private copy of the shared OTel agent for the otel-libs soak test (count per service, fault
+    # injection) without touching the shared agent/gateway. Plain Deployment, not an OpenTelemetryCollector CR.
+    - chart: bedag/raw
+      name: soak-agent
+      namespace: dev-otel-libs
+      condition: soak-agent.enabled
+      version: '{{ index .Values "soak-agent" "version" }}'
+      values:
+          - ./soak-agent/values.yaml.gotmpl
