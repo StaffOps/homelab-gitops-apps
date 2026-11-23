@@ -33,6 +33,9 @@ env:
     OPENCLAW_GATEWAY_PORT: "18789"
     OPENCLAW_DISABLE_BONJOUR: "1"
     TZ: America/Fortaleza
+    # Heap cap test (2026-11-23): working set grew ~25 MiB/day from 1855 MiB (anon/heap, not cache). Not set by the
+    # image. Rollback: remove on "Reached heap limit" / crashloop. If stable for days, try 1536.
+    NODE_OPTIONS: --max-old-space-size=1792
 # OPENCLAW_GATEWAY_PASSWORD, OPENCLAW_LLM_API_KEY, A2A_HERMES_TOKEN, A2A_HERMES_OUTBOUND_TOKEN, OPENCLAW_HOOKS_TOKEN,
 # OPENCLAW_TELEGRAM_BOT_TOKEN (Vault homelab/apps/openclaw/openclaw)
 envFrom:
