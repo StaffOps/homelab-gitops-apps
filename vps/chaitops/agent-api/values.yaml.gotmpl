@@ -4,14 +4,17 @@ fullnameOverride: agent-api
 image:
     registry: ghcr.io
     repository: staffops/chaitops/agent-api
-    tag: "v0.4.1"
-    digest: sha256:c495a37c315a9958749206ea7c493dfa5abdfc76f65b2b1fce9c96a627e048dc
+    tag: "v0.4.2"
+    digest: sha256:b4f8b58fbf832ae8f86812007121c8b64588d6c597a8aeb509a6d487e0e2a4bd
 ports:
     - name: http
       containerPort: 8000
 env:
     AUTH_REQUIRED: "true"
-    MAX_CONCURRENT_REQUESTS: "2" # bounds image-decode memory (~400 MiB per request in the runner)
+    MAX_CONCURRENT_REQUESTS: "4" # ~590 MiB in the runner for 4 text calls, ~1 GiB with one large image
+    MAX_CONCURRENT_IMAGE_REQUESTS: "1" # image calls also take this slot, so text never waits behind images
+    QUEUE_WAIT_SECONDS: "20" # FIFO wait before 429; queue + timeout + grace must stay < 600
+    MAX_REQUEST_BODY_BYTES: "12582912" # 12 MiB: up to 2x MAX bodies sit in gateway memory (limit 768Mi)
     REQUEST_TIMEOUT_SECONDS: "300"
     RUNNER_TIMEOUT_GRACE_SECONDS: "10"
     CLAUDE_RUNNER_URL: http://claude-runner:8000
