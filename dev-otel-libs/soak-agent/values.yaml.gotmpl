@@ -42,6 +42,8 @@ connectors:
                     - 'name == "demo.order.process"'
                     - 'IsMatch(name, "^(send|process) demo:[a-z]+:orders$")'
                     - 'kind == SPAN_KIND_CLIENT and attributes["rpc.system"] == "grpc"'
+                    # current RPC semconv key (Go, .NET); rpc.system above is the older one (Python, Node.js)
+                    - 'kind == SPAN_KIND_CLIENT and attributes["rpc.system.name"] == "grpc"'
                 attributes:
                     - key: service.name
                     - key: deployment.environment.name
