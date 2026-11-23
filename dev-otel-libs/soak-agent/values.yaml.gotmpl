@@ -19,7 +19,9 @@ processors:
         passthrough: true
     batch: {}
     # The count connector emits deltas; the Prometheus exporter needs cumulative counters or it keeps the last batch
-    deltatocumulative: {}
+    deltatocumulative:
+        # keep series through short gaps in a soak run (default 5m)
+        max_stale: 30m
 connectors:
     # Exact counts per service and environment of everything that passes through
     count:
@@ -29,6 +31,21 @@ connectors:
                 attributes:
                     - key: service.name
                     - key: deployment.environment.name
+            # Only span families with a fixed count per request (soak exactness check), per sending instance
+            otel_libs.soak.fixed_spans:
+                description: Spans of the fixed-count families (server/consumer/producer, order spans, gRPC clients)
+                conditions:
+                    - 'kind == SPAN_KIND_SERVER'
+                    - 'kind == SPAN_KIND_CONSUMER'
+                    - 'kind == SPAN_KIND_PRODUCER'
+                    - 'name == "demo.order.accept"'
+                    - 'name == "demo.order.process"'
+                    - 'IsMatch(name, "^(send|process) demo:[a-z]+:orders$")'
+                    - 'kind == SPAN_KIND_CLIENT and attributes["rpc.system"] == "grpc"'
+                attributes:
+                    - key: service.name
+                    - key: deployment.environment.name
+                    - key: service.instance.id
         spanevents:
             otel_libs.soak.span_events:
                 description: Span events received by the soak agent
@@ -56,6 +73,7 @@ exporters:
     # The count metrics stay local: scraped from :8889 (PodMonitor), never forwarded
     prometheus/count:
         endpoint: 0.0.0.0:8889
+        metric_expiration: 30m
 service:
     telemetry:
         metrics:
