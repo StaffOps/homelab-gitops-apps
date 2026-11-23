@@ -15,11 +15,11 @@ processors:
         spike_limit_mib: %s
     # Passthrough: only records the sender's IP as k8s.pod.ip (no API access, no RBAC), so the shared agent still
     # enriches with the real demo pod and not with this copy
-    k8sattributes:
+    k8s_attributes:
         passthrough: true
     batch: {}
     # The count connector emits deltas; the Prometheus exporter needs cumulative counters or it keeps the last batch
-    deltatocumulative:
+    delta_to_cumulative:
         # keep series through short gaps in a soak run (default 5m)
         max_stale: 30m
 connectors:
@@ -47,7 +47,9 @@ connectors:
                 attributes:
                     - key: service.name
                     - key: deployment.environment.name
+                    # without a default, a span lacking service.instance.id is not counted at all
                     - key: service.instance.id
+                      default_value: unset
         spanevents:
             otel_libs.soak.span_events:
                 description: Span events received by the soak agent
@@ -89,19 +91,19 @@ service:
     pipelines:
         traces:
             receivers: [otlp]
-            processors: [memory_limiter, k8sattributes, batch]
+            processors: [memory_limiter, k8s_attributes, batch]
             exporters: [otlp_grpc/agent, count]
         metrics:
             receivers: [otlp]
-            processors: [memory_limiter, k8sattributes, batch]
+            processors: [memory_limiter, k8s_attributes, batch]
             exporters: [otlp_grpc/agent, count]
         logs:
             receivers: [otlp]
-            processors: [memory_limiter, k8sattributes, batch]
+            processors: [memory_limiter, k8s_attributes, batch]
             exporters: [otlp_grpc/agent, count]
         metrics/count:
             receivers: [count]
-            processors: [deltatocumulative]
+            processors: [delta_to_cumulative]
             exporters: [prometheus/count]
 ` $bp (ternary "64" "400" $bp) (ternary "16" "100" $bp) }}
 resources:
