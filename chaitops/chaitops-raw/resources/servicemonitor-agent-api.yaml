@@ -1,0 +1,21 @@
+# Prometheus (kps, namespace monitoring) scrapes agent-api's /metrics. /metrics needs the API key
+# (METRICS_AUTH_REQUIRED defaults to true): the bearer is the single key in Secret agent-api (API_KEYS,
+# Vault homelab/apps/chaitops/agent-api). If API_KEYS ever holds several keys, give the scrape its own
+# entry instead (a comma-separated value is not a valid bearer).
+- apiVersion: monitoring.coreos.com/v1
+  kind: ServiceMonitor
+  metadata:
+      name: agent-api
+  spec:
+      selector:
+          matchLabels:
+              app.kubernetes.io/instance: agent-api
+      endpoints:
+          - port: http
+            path: /metrics
+            interval: 30s
+            authorization:
+                type: Bearer
+                credentials:
+                    name: agent-api
+                    key: API_KEYS

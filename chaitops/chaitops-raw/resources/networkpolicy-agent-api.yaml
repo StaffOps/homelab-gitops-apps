@@ -1,4 +1,4 @@
-# agent-api: in 8000 only from Gateway public (namespace gateway); out only to claude-runner and DNS. Istio ambient:
+# agent-api: in 8000 only from Gateway public (namespace gateway) and Prometheus (namespace monitoring); out only to claude-runner and DNS. Istio ambient:
 # mesh traffic arrives on ztunnel's HBONE port 15008 and kubelet probes from 169.254.7.127.
 - apiVersion: networking.k8s.io/v1
   kind: NetworkPolicy
@@ -17,6 +17,19 @@
                   podSelector:
                       matchLabels:
                           gateway.networking.k8s.io/gateway-name: {{ .Values.gateway.name }}
+            ports:
+                - port: 8000
+                  protocol: TCP
+                - port: 15008
+                  protocol: TCP
+          # Prometheus (kps) scrapes /metrics (servicemonitor-agent-api.yaml).
+          - from:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: monitoring
+                  podSelector:
+                      matchLabels:
+                          app.kubernetes.io/name: prometheus
             ports:
                 - port: 8000
                   protocol: TCP
