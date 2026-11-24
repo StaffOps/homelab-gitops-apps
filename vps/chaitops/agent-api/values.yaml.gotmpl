@@ -4,8 +4,8 @@ fullnameOverride: agent-api
 image:
     registry: ghcr.io
     repository: staffops/chaitops/agent-api
-    tag: "v0.5.0"
-    digest: sha256:b074723ca28fb91bf39bbf07933026a47b0dbcc346a8aacdc043caeb6bbe2ec9
+    tag: "v0.6.0"
+    digest: sha256:10cac9003f768f456d322945835cbf72b35fb41720843972ab50a9ad4e7b4154
 ports:
     - name: http
       containerPort: 8000
@@ -16,6 +16,7 @@ env:
     QUEUE_WAIT_SECONDS: "20" # FIFO wait before 429; queue + timeout + grace must stay < 600
     MAX_REQUEST_BODY_BYTES: "12582912" # 12 MiB: up to 2x MAX bodies sit in gateway memory (limit 768Mi)
     REQUEST_TIMEOUT_SECONDS: "300"
+    MAX_CONCURRENT_PER_KEY: "3" # one API key cannot hold every slot (multi-agent-ops PK-2)
     RUNNER_TIMEOUT_GRACE_SECONDS: "10"
     CLAUDE_RUNNER_URL: http://claude-runner:8000
 # API_KEYS (Vault homelab/apps/chaitops/agent-api, ExternalSecret in chaitops-raw)
@@ -35,6 +36,15 @@ configMaps:
                 # No required_env: the credential (CLAUDE_CODE_OAUTH_TOKEN from .env.claude or
                 # ANTHROPIC_API_KEY) lives in the claude-runner, not in the gateway. The agent
                 # is listed only while the runner reports /ready.
+# Graceful drain (chaitops specs/multi-agent-ops GD-1): the preStop sleep lets
+# the Service drop this pod before it stops accepting connections; the grace
+# period covers preStop + REQUEST_TIMEOUT_SECONDS + QUEUE_WAIT_SECONDS + runner
+# grace (10 + 300 + 20 + 10 = 340), so a deploy does not cut a run in flight.
+lifecycle:
+  preStop:
+    exec:
+      command: ["sleep", "10"]
+terminationGracePeriodSeconds: 345
 livenessProbe:
     httpGet:
         path: /healthz
