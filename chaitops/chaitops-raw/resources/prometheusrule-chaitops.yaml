@@ -1,0 +1,123 @@
+# Alert rules for chaitops (copied from StaffOps/chaitops infra/prometheus/chaitops.rules.yaml,
+# tested there with promtool). Prometheus templates are escaped for helmfile tpl.
+# Loaded together with the ServiceMonitor: ChaitopsMetricsAbsent fires if the scrape is missing.
+- apiVersion: monitoring.coreos.com/v1
+  kind: PrometheusRule
+  metadata:
+      name: chaitops
+  spec:
+      groups: load them as a rule file, or wrap them in a
+      # PrometheusRule (spec: {{"{{"}} readFile "chaitops.rules.yaml" {{"}}"}}) the way the
+      # homelab charts do. Tests: infra/prometheus/chaitops.rules.test.yaml
+      # (`make rules-test`).
+      #
+      # Only gateway metrics are used; no label beyond the fixed vocabularies the
+      # gateway emits. The gateway exposes every alerted counter at 0 from startup,
+      # so increase() sees the first event after a restart (RA-4). Thresholds suit
+      # the personal profile (4 slots, ~1.5-5 s calls).
+      #
+      # Alertmanager (GitOps follow-up): ChaitopsSubscriptionLimited should inhibit
+      # ChaitopsErrorRateHigh and ChaitopsSubscriptionNearLimit, which fire with it.
+      groups:
+        - name: chaitops
+          rules:
+            # The /metrics endpoint is not being scraped at all (pod down, scrape
+            # broken). chaitops_subscription_limited is always rendered. Load this
+            # rule only together with the scrape config, or it fires for good. With
+            # two chaitops instances on one Prometheus, add a job/instance matcher.
+            - alert: ChaitopsMetricsAbsent
+              expr: absent(chaitops_subscription_limited)
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: "chaitops: no metrics scraped for 5 minutes"
+                description: "The gateway's /metrics is missing: the pod is down or the scrape is broken."
+
+            # ADR-0013 is the guiding rule: the CLI must behave as one model, one
+            # turn, no tools. Any violation needs a look (usually a Claude Code bump).
+            # signal="tools" has its own critical alert below.
+            - alert: ChaitopsPurityViolation
+              expr: sum by (signal) (increase(chaitops_purity_violations_total{signal!="tools"}[15m])) > 0
+              labels:
+                severity: warning
+              annotations:
+                summary: "chaitops: CLI purity signal {{"{{"}} $labels.signal {{"}}"}} violated"
+                description: >-
+                  The Claude Code CLI stopped behaving as a plain model (signal
+                  {{"{{"}} $labels.signal {{"}}"}}). Check the gateway log for
+                  `"event": "purity_violation"` and the last CLI bump.
+
+            # The fail-closed path fired: the CLI started with tools or called one.
+            - alert: ChaitopsToolUseBlocked
+              expr: sum(increase(chaitops_purity_violations_total{signal="tools"}[15m])) > 0
+              labels:
+                severity: critical
+              annotations:
+                summary: "chaitops: a run started with tools or called a tool and was killed"
+                description: >-
+                  The runner killed a CLI that had tools or MCP servers, or that opened
+                  a tool_use block (502 purity_violation). `--tools ""` regressed:
+                  treat as a security issue until explained.
+
+            # Clients are being turned away: more slots, a longer queue or less load.
+            - alert: ChaitopsRejectingRequests
+              expr: sum by (lane) (rate(chaitops_rejected_total{reason!="client_disconnected"}[10m])) * 60 > 1
+              for: 10m
+              labels:
+                severity: warning
+              annotations:
+                summary: "chaitops: more than 1 request/min refused with 429 (lane {{"{{"}} $labels.lane {{"}}"}})"
+                description: >-
+                  Concurrency 429s on lane {{"{{"}} $labels.lane {{"}}"}} for 10 minutes (slots or
+                  queue full, or queue timeout). Compare chaitops_slots_in_use with
+                  chaitops_slots_max, or raise QUEUE_WAIT_SECONDS.
+
+            # Requests are always waiting for a slot: the gateway is saturated.
+            # Dormant with QUEUE_WAIT_SECONDS=0 (nothing ever queues); then
+            # ChaitopsRejectingRequests covers saturation.
+            - alert: ChaitopsQueueBacklog
+              expr: min_over_time(sum(chaitops_queue_waiting)[10m:1m]) > 0
+              labels:
+                severity: warning
+              annotations:
+                summary: "chaitops: requests have been waiting for a slot for 10 minutes"
+                description: "There was always at least one request in the queue for 10 minutes: the slots are saturated."
+
+            # Runs failing or timing out. Disconnects say nothing about the run and
+            # are left out; stop-sequence cuts are successful runs and count as such.
+            - alert: ChaitopsErrorRateHigh
+              expr: >-
+                sum(rate(chaitops_completions_total{outcome=~"error|timeout"}[15m]))
+                / sum(rate(chaitops_completions_total{outcome!="disconnected"}[15m])) > 0.2
+                and sum(rate(chaitops_completions_total{outcome!="disconnected"}[15m])) * 900 >= 5
+              for: 15m
+              labels:
+                severity: warning
+              annotations:
+                summary: "chaitops: more than 20% of runs fail or time out"
+                description: >-
+                  Over 15 minutes (with at least 5 runs), more than 20% of completions
+                  ended in error or timeout. Look at error_stage in the completion log.
+
+            # The subscription window is almost used up: agents will get 429s soon.
+            # The gateway drops a reading once its window has reset.
+            - alert: ChaitopsSubscriptionNearLimit
+              expr: max by (window) (chaitops_subscription_utilization) >= 0.9
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: "chaitops: subscription window {{"{{"}} $labels.window {{"}}"}} at {{"{{"}} $value | humanizePercentage {{"}}"}}"
+                description: "The Claude subscription window is nearly exhausted; requests will soon be refused until it resets."
+
+            # Nothing to do but wait for the reset (personal profile): warning.
+            - alert: ChaitopsSubscriptionLimited
+              expr: max(chaitops_subscription_limited) == 1
+              labels:
+                severity: warning
+              annotations:
+                summary: "chaitops: the Claude subscription limit was reached"
+                description: >-
+                  Calls are refused with 429 subscription_rate_limit until the window
+                  resets (see chaitops_subscription_resets_at_seconds).
