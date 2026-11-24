@@ -21,6 +21,15 @@ env:
 envFrom:
     - secretRef:
           name: claude-runner
+# Graceful drain (chaitops specs/multi-agent-ops GD-1): the preStop sleep lets
+# the Service drop this pod before it stops accepting connections; the grace
+# period covers preStop + REQUEST_TIMEOUT_SECONDS + QUEUE_WAIT_SECONDS + runner
+# grace (10 + 300 + 20 + 10 = 340), so a deploy does not cut a run in flight.
+lifecycle:
+  preStop:
+    exec:
+      command: ["sleep", "10"]
+terminationGracePeriodSeconds: 345
 livenessProbe:
     httpGet:
         path: /healthz
