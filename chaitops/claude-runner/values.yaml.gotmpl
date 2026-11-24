@@ -6,13 +6,18 @@ imagePullSecrets:
 image:
     registry: ghcr.io
     repository: staffops/chaitops/claude-runner
-    tag: "v0.5.0"
-    digest: sha256:f21b7dbe36e7efd24a653dcc127bb2fb0b840f36647559435efaacd0388c9c6c
+    tag: "v0.5.1-rc.1" # release candidate under homologation; vps/chaitops stays on v0.5.0
+    digest: sha256:150ba65d07e4dda6a847c4ca729fa82d30d08c1c848d1454eec3b04bbdddafef
 ports:
     - name: http
       containerPort: 8000
 # CLAUDE_CODE_OAUTH_TOKEN (Vault homelab/apps/chaitops/claude-runner, ExternalSecret in chaitops-raw).
 # RUNNER_*, HOME=/home/app and RUNNER_WORK_DIR=/tmp/work come from the image.
+env:
+    # Stateless warm pool (chaitops specs/warm-pool): one idle CLI for claude/sonnet with
+    # reasoning_effort=medium, 86% of real traffic. ~190 MiB of the 1280Mi limit; it refills
+    # only when no run is active. Remove this to turn the pool off.
+    RUNNER_WARM_POOL: '{"sonnet@medium":1}'
 envFrom:
     - secretRef:
           name: claude-runner
