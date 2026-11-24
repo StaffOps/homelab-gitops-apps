@@ -7,8 +7,8 @@ imagePullSecrets:
 image:
     registry: ghcr.io
     repository: staffops/chaitops/agent-api
-    tag: "v0.5.1-rc.1" # release candidate under homologation; vps/chaitops stays on v0.5.0
-    digest: sha256:66d723aeee7b4d1cb64bc2b39e8d1b72ab16e62b56f460ea064d7f4dbf95409b
+    tag: "v0.6.0-rc.1" # release candidate under homologation; vps/chaitops stays on v0.5.x
+    digest: sha256:69d513435d9442486239e012a79ee883cb287c97e02a1c3fe6252539f55671f0
 ports:
     - name: http
       containerPort: 8000
@@ -19,6 +19,7 @@ env:
     QUEUE_WAIT_SECONDS: "20" # FIFO wait before 429; queue + timeout + grace must stay < 600
     MAX_REQUEST_BODY_BYTES: "12582912" # 12 MiB: up to 2x MAX bodies sit in gateway memory (limit 768Mi)
     REQUEST_TIMEOUT_SECONDS: "300"
+    MAX_CONCURRENT_PER_KEY: "3" # one API key cannot hold every slot (multi-agent-ops PK-2)
     RUNNER_TIMEOUT_GRACE_SECONDS: "10"
     CLAUDE_RUNNER_URL: http://claude-runner:8000
 # API_KEYS (Vault homelab/apps/chaitops/agent-api, ExternalSecret in chaitops-raw)
