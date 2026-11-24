@@ -1,0 +1,20 @@
+# https://chaitops.<domain> → agent-api:8000 through Gateway public (external-dns creates the record, the wildcard
+# certificate covers TLS). The Gateway address is private: reachable from the home network only.
+- apiVersion: gateway.networking.k8s.io/v1
+  kind: HTTPRoute
+  metadata:
+      name: agent-api
+  spec:
+      parentRefs:
+          - name: {{ .Values.gateway.name }}
+            namespace: {{ .Values.gateway.namespace }}
+            sectionName: https
+      hostnames:
+          - chaitops.{{ .Values.domain }}
+      rules:
+          - backendRefs:
+                - name: agent-api
+                  port: 8000
+            # long completions: agent-api's REQUEST_TIMEOUT_SECONDS (300) + queue wait (20) + grace
+            timeouts:
+                request: 360s

@@ -1,0 +1,46 @@
+# claude-runner: in 8000 only from agent-api; out only HTTPS to the internet (Anthropic) and DNS. Private, cluster and
+# tailnet ranges are excluded from the internet rule. Istio ambient: HBONE 15008 and kubelet probes from 169.254.7.127.
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+      name: claude-runner
+  spec:
+      podSelector:
+          matchLabels:
+              app.kubernetes.io/instance: claude-runner
+      policyTypes: [Ingress, Egress]
+      ingress:
+          - from:
+                - podSelector:
+                      matchLabels:
+                          app.kubernetes.io/instance: agent-api
+            ports:
+                - port: 8000
+                  protocol: TCP
+                - port: 15008
+                  protocol: TCP
+          - from:
+                - ipBlock:
+                      cidr: 169.254.7.127/32
+      egress:
+          - to:
+                - ipBlock:
+                      cidr: 0.0.0.0/0
+                      except:
+                          - 10.0.0.0/8
+                          - 172.16.0.0/12
+                          - 192.168.0.0/16
+                          - 100.64.0.0/10
+                          - 169.254.0.0/16
+            ports:
+                - port: 443
+                  protocol: TCP
+          - to:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+            ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP

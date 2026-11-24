@@ -1,0 +1,46 @@
+# chaitops on k8s01: an OpenAI-compatible gateway (agent-api) in front of the Claude Code CLI (claude-runner), backed by
+# the owner's personal Claude subscription. Exposed at https://chaitops.<domain> through Gateway public, whose address
+# is private (home network only, never the internet); every call needs a key from API_KEYS. Same images and Vault
+# secrets as vps/chaitops. Releases: agent-api and claude-runner (staffops/generic); chaitops-raw = SecretStore,
+# ExternalSecrets, HTTPRoute and NetworkPolicies (bedag/raw, one file per object).
+repositories:
+    - name: staffops
+      url: https://staffops.github.io/helm-charts
+    - name: bedag
+      url: https://bedag.github.io/helm-charts
+environments:
+    default:
+        values:
+            - ../environment.yaml
+            - genericChart:
+                  version: 0.1.0
+            - agent-api:
+                  enabled: true
+            - claude-runner:
+                  enabled: true
+            - chaitops-raw:
+                  enabled: true
+                  version: 2.0.2
+---
+releases:
+    - chart: staffops/generic
+      name: agent-api
+      namespace: chaitops
+      condition: agent-api.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./agent-api/values.yaml.gotmpl
+    - chart: staffops/generic
+      name: claude-runner
+      namespace: chaitops
+      condition: claude-runner.enabled
+      version: '{{ .Values.genericChart.version }}'
+      values:
+          - ./claude-runner/values.yaml.gotmpl
+    - chart: bedag/raw
+      name: chaitops-raw
+      namespace: chaitops
+      condition: chaitops-raw.enabled
+      version: '{{ index .Values "chaitops-raw" "version" }}'
+      values:
+          - ./chaitops-raw/values.yaml.gotmpl

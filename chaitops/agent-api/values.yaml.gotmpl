@@ -1,0 +1,86 @@
+# agent-api of chaitops on k8s01 (staffops/generic 0.1.0; every key: helm show values staffops/generic --version 0.1.0).
+# OpenAI-compatible /v1 at https://chaitops.<domain> (HTTPRoute in chaitops-raw, home network only); it forwards to
+# claude-runner. Same images and Vault secrets as vps/chaitops.
+fullnameOverride: agent-api
+imagePullSecrets:
+    - name: ghcr # private ghcr.io/staffops/chaitops images (Vault homelab/apps/chaitops/ghcr, chaitops-raw)
+image:
+    registry: ghcr.io
+    repository: staffops/chaitops/agent-api
+    tag: "v0.4.2"
+    digest: sha256:b4f8b58fbf832ae8f86812007121c8b64588d6c597a8aeb509a6d487e0e2a4bd
+ports:
+    - name: http
+      containerPort: 8000
+env:
+    AUTH_REQUIRED: "true"
+    MAX_CONCURRENT_REQUESTS: "4" # ~590 MiB in the runner for 4 text calls, ~1 GiB with one large image
+    MAX_CONCURRENT_IMAGE_REQUESTS: "1" # image calls also take this slot, so text never waits behind images
+    QUEUE_WAIT_SECONDS: "20" # FIFO wait before 429; queue + timeout + grace must stay < 600
+    MAX_REQUEST_BODY_BYTES: "12582912" # 12 MiB: up to 2x MAX bodies sit in gateway memory (limit 768Mi)
+    REQUEST_TIMEOUT_SECONDS: "300"
+    RUNNER_TIMEOUT_GRACE_SECONDS: "10"
+    CLAUDE_RUNNER_URL: http://claude-runner:8000
+# API_KEYS (Vault homelab/apps/chaitops/agent-api, ExternalSecret in chaitops-raw)
+envFrom:
+    - secretRef:
+          name: agent-api
+# Agent definitions (personal-assistant infra/chaitops/config/agents/, no secrets)
+configMaps:
+    agents:
+        mountPath: /etc/staffops/agents
+        data:
+            claude.yaml: |
+                name: claude
+                description: "Claude Code CLI (Anthropic)"
+                sidecar_url: http://claude-runner:8000
+                timeout_seconds: 900
+                # No required_env: the credential (CLAUDE_CODE_OAUTH_TOKEN from .env.claude or
+                # ANTHROPIC_API_KEY) lives in the claude-runner, not in the gateway. The agent
+                # is listed only while the runner reports /ready.
+livenessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+readinessProbe:
+    httpGet:
+        path: /healthz
+        port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+resources:
+    requests:
+        cpu: 10m
+        memory: 100Mi # max 7d 76Mi x 1.3
+    limits:
+        cpu: "1"
+        memory: 768Mi
+# The image has no USER and runs as root today (compose has no user:, facts 2026-11-15); it was never tested
+# non-root. Kept as root, with read-only root, no capabilities and no privilege escalation.
+podSecurityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+    runAsGroup: 0
+    fsGroup: null
+    fsGroupChangePolicy: null
+    seccompProfile:
+        type: RuntimeDefault
+securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: false
+    capabilities:
+        drop: ["ALL"]
+tmpVolume:
+    enabled: true
+    mountPath: /tmp
+    sizeLimit: 64Mi
+tests:
+    enabled: false
+pdb:
+    enabled: false # single node: a PDB only blocks drains

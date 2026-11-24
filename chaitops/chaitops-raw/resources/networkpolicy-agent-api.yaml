@@ -1,0 +1,46 @@
+# agent-api: in 8000 only from Gateway public (namespace gateway); out only to claude-runner and DNS. Istio ambient:
+# mesh traffic arrives on ztunnel's HBONE port 15008 and kubelet probes from 169.254.7.127.
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+      name: agent-api
+  spec:
+      podSelector:
+          matchLabels:
+              app.kubernetes.io/instance: agent-api
+      policyTypes: [Ingress, Egress]
+      ingress:
+          - from:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: {{ .Values.gateway.namespace }}
+                  podSelector:
+                      matchLabels:
+                          gateway.networking.k8s.io/gateway-name: {{ .Values.gateway.name }}
+            ports:
+                - port: 8000
+                  protocol: TCP
+                - port: 15008
+                  protocol: TCP
+          - from:
+                - ipBlock:
+                      cidr: 169.254.7.127/32
+      egress:
+          - to:
+                - podSelector:
+                      matchLabels:
+                          app.kubernetes.io/instance: claude-runner
+            ports:
+                - port: 8000
+                  protocol: TCP
+                - port: 15008
+                  protocol: TCP
+          - to:
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+            ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
