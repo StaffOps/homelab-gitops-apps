@@ -4,8 +4,8 @@ fullnameOverride: claude-runner
 image:
     registry: ghcr.io
     repository: staffops/chaitops/claude-runner
-    tag: "v0.5.0"
-    digest: sha256:f21b7dbe36e7efd24a653dcc127bb2fb0b840f36647559435efaacd0388c9c6c
+    tag: "v0.6.0"
+    digest: sha256:18831d193ae6ce619e7cc95e21e0e9694fc12925651c8c28622ae34ce8603a5a
 ports:
     - name: http
       containerPort: 8000
@@ -14,6 +14,21 @@ ports:
 envFrom:
     - secretRef:
           name: claude-runner
+env:
+    # Stateless warm pool (chaitops specs/warm-pool): one idle CLI for claude/sonnet with
+    # reasoning_effort=medium, 86% of this VPS's traffic over 7 days. ~160-190 MiB of the 1280Mi
+    # limit; it refills only when no run is active. Homologated on k8s01 (0.5.1-rc.1, 0.6.0-rc.1).
+    # Remove to turn the pool off.
+    RUNNER_WARM_POOL: '{"sonnet@medium":1}'
+# Graceful drain (chaitops specs/multi-agent-ops GD-1): the preStop sleep lets
+# the Service drop this pod before it stops accepting connections; the grace
+# period covers preStop + REQUEST_TIMEOUT_SECONDS + QUEUE_WAIT_SECONDS + runner
+# grace (10 + 300 + 20 + 10 = 340), so a deploy does not cut a run in flight.
+lifecycle:
+  preStop:
+    exec:
+      command: ["sleep", "10"]
+terminationGracePeriodSeconds: 345
 livenessProbe:
     httpGet:
         path: /healthz
