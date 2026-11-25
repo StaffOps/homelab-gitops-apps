@@ -18,6 +18,10 @@ env:
     REQUEST_TIMEOUT_SECONDS: "300"
     MAX_CONCURRENT_PER_KEY: "3" # one API key cannot hold every slot (multi-agent-ops PK-2)
     RUNNER_TIMEOUT_GRACE_SECONDS: "10"
+    # /metrics without the API key: the VPS has no Prometheus CRDs, and Alloy's annotated scrape sends no
+    # credentials. /v1 stays authenticated. Who reaches 8000 (Hermes, 9router, Alloy) can read usage, key ids
+    # and subscription %, never a key or content (owner's choice, 2026-11-24).
+    METRICS_AUTH_REQUIRED: "false"
     CLAUDE_RUNNER_URL: http://claude-runner:8000
 # API_KEYS (Vault homelab/apps/chaitops/agent-api, ExternalSecret in chaitops-raw)
 envFrom:
@@ -90,6 +94,11 @@ tmpVolume:
 # Fixed address: Hermes on the host calls http://10.43.100.10:8000/v1
 service:
     clusterIP: 10.43.100.10
+    # Alloy scrapes annotated Services and remote-writes to k8s01 with cluster="vps" (job=agent-api, as on k8s01)
+    annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
 tests:
     enabled: false
 pdb:
