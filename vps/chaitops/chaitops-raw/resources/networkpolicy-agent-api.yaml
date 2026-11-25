@@ -1,5 +1,5 @@
-# agent-api: in 8000 from the host (Hermes, seen from pods as host.ip) and from 9router (namespace edge); out only to
-# claude-runner and DNS.
+# agent-api: in 8000 from the host (Hermes, seen from pods as host.ip), from 9router (namespace edge) and from Alloy
+# (namespace monitoring, /metrics); out only to claude-runner and DNS.
 - apiVersion: networking.k8s.io/v1
   kind: NetworkPolicy
   metadata:
@@ -19,6 +19,10 @@
                   podSelector:
                       matchLabels:
                           app.kubernetes.io/instance: ninerouter
+                # Metrics: Alloy
+                - namespaceSelector:
+                      matchLabels:
+                          kubernetes.io/metadata.name: monitoring
             ports:
                 - port: 8000
                   protocol: TCP
